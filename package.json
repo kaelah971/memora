@@ -1,0 +1,52 @@
+{
+  "name": "memora",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test",
+    "minds:discover": "tsx scripts/minds/discover.ts",
+    "minds:ping": "tsx scripts/minds/ping.ts",
+    "minds:spike": "tsx scripts/minds/spike.ts",
+    "db:seed": "tsx scripts/db/seed.ts",
+    "db:doctor": "tsx scripts/db/doctor.ts",
+    "discord:doctor": "tsx scripts/discord/doctor.ts",
+    "discord:listen": "tsx scripts/discord/listener.ts",
+    "youtube:doctor": "tsx scripts/youtube/doctor.ts"
+  },
+  "dependencies": {
+    "@animocabrands/minds-client-lib": "^0.1.3",
+    "@gsap/react": "^2.1.2",
+    "@supabase/ssr": "^0.12.4",
+    "@supabase/supabase-js": "^2.112.3",
+    "discord.js": "^14.27.0",
+    "googleapis": "^176.0.0",
+    "gsap": "^3.15.0",
+    "lenis": "^1.3.26",
+    "lucide-react": "^1.33.0",
+    "next": "16.3.2",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "dotenv": "^17.4.2",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.2",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.12",
+    "typescript": "^5"
+  }
+}
