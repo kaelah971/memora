@@ -7,7 +7,8 @@ import { getDiscordConfigStatus, getDiscordOAuthConfigStatus } from "@/lib/disco
 import { getDiscordConnection, listDiscordConnectionChannels } from "@/lib/data/discord-connection";
 import type { DiscordReadableChannel } from "@/lib/discord/channels";
 import { getDiscordImportStatus } from "@/lib/data/discord-import";
-import { defaultDiscordOnboardingSettings, getDiscordOnboardingSettings, listDiscordOnboardingReceipts } from "@/lib/data/discord-onboarding";
+import { getDiscordOnboardingSettings, listDiscordOnboardingReceipts } from "@/lib/data/discord-onboarding";
+import { discordOnboardingSettingsView } from "@/lib/discord/onboarding-settings";
 import { getDevelopmentCreator } from "@/lib/youtube/server";
 
 export const dynamic = "force-dynamic";
@@ -50,21 +51,19 @@ export default async function DiscordImportPage() {
     ? selectedChannelNames.join(", ") || connection.selectedChannelIds.join(", ")
     : config.monitoredChannelIds.join(", ");
   const onboardingSettings = connection
-    ? onboardingSettingsResult?.data
-      ? {
-          connectionId: connectionResult!.data!.id,
-          enabled: onboardingSettingsResult.data.enabled,
-          sendMode: onboardingSettingsResult.data.send_mode,
-          welcomeChannelId: onboardingSettingsResult.data.welcome_channel_id,
-          resourceChannelId: onboardingSettingsResult.data.resource_channel_id,
-          questionChannelId: onboardingSettingsResult.data.question_channel_id,
-          supportChannelId: onboardingSettingsResult.data.support_channel_id,
-          builderChannelId: onboardingSettingsResult.data.builder_channel_id,
-          beginnerGuideText: onboardingSettingsResult.data.beginner_guide_text,
-        }
-      : { connectionId: connectionResult!.data!.id, ...defaultDiscordOnboardingSettings() }
+    ? discordOnboardingSettingsView(connectionResult!.data!.id, onboardingSettingsResult?.data ?? null, connection.selectedChannelIds)
     : null;
   const onboardingError = onboardingSettingsResult?.error ?? onboardingReceiptsResult?.error ?? null;
+  const onboardingDebug = creator && connection && onboardingSettings ? {
+    creatorId: creator.id,
+    connectionId: connectionResult!.data!.id,
+    guildId: connection.guildId,
+    selectedChannelIds: connection.selectedChannelIds,
+    loadedRowId: onboardingSettings.rowId,
+    loadedUpdatedAt: onboardingSettings.updatedAt,
+    loadedEnabled: onboardingSettings.enabled,
+    loadedSendMode: onboardingSettings.sendMode,
+  } : null;
 
   return (
     <AppScreen
@@ -117,12 +116,13 @@ export default async function DiscordImportPage() {
             <p>Import is for historical sync; the listener is for real-time assistance in saved channels.</p>
           </div>
            <DiscordOnboardingSettings
-            connectionId={connectionResult?.data?.id ?? null}
-            channels={(channelsResult?.data ?? []) as DiscordReadableChannel[]}
-            initialSettings={onboardingSettings}
-            initialReceipts={onboardingReceiptsResult?.data ?? []}
-            initialError={onboardingError}
-          />
+             connectionId={connectionResult?.data?.id ?? null}
+             channels={(channelsResult?.data ?? []) as DiscordReadableChannel[]}
+             initialSettings={onboardingSettings}
+             initialReceipts={onboardingReceiptsResult?.data ?? []}
+             initialError={onboardingError}
+             debug={onboardingDebug}
+           />
         </>
       )}
     </AppScreen>

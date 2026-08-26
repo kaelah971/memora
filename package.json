@@ -19,6 +19,7 @@
     "db:seed": "tsx scripts/db/seed.ts",
     "db:doctor": "tsx scripts/db/doctor.ts",
     "discord:doctor": "tsx scripts/discord/doctor.ts",
+    "discord:inspect-onboarding": "tsx scripts/discord/inspect-onboarding-settings.ts",
     "discord:listen": "tsx scripts/discord/listener.ts",
     "youtube:doctor": "tsx scripts/youtube/doctor.ts"
   },

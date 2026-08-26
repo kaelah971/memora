@@ -7,6 +7,7 @@ import {
   cleanAndValidateOnboardingMessage,
   formatOnboardingMessageForDisplay,
   isClearGuideRequest,
+  matchClearGuideRequest,
 } from "../../lib/discord/onboarding";
 
 const channels = [
@@ -14,11 +15,40 @@ const channels = [
   { id: "1541890494035136522", name: "announcements", label: "resource channel" },
 ];
 
-test("guide request detection stays narrow and does not auto-match ordinary community messages", () => {
-  assert.equal(isClearGuideRequest("I'm new here, where do I start?"), true);
+test("guide request detection matches explicit beginner-guide phrases and stays narrow", () => {
+  const guideRequests = [
+    "where is the creator starter guide?",
+    "where is the starter guide?",
+    "where can I find the starter guide?",
+    "can you send me the starter guide for creators?",
+    "can you show me the beginner guide?",
+    "can someone show me the beginner guide?",
+    "please where should I start as a beginner creator?",
+    "I’m new here",
+    "I'm new here, where do I start?",
+    "where do I start?",
+    "where should I start?",
+    "how do I start?",
+    "what should I read first?",
+    "any beginner resources?",
+    "beginner resources please",
+    "starter resources please",
+  ];
+  for (const message of guideRequests) assert.equal(isClearGuideRequest(message), true, message);
+
   assert.equal(isClearGuideRequest("Any resources for beginners?"), true);
-  assert.equal(isClearGuideRequest("The new video is helpful, thanks!"), false);
-  assert.equal(isClearGuideRequest("Can someone review my complex workflow?"), false);
+  const unrelatedMessages = [
+    "I like this project",
+    "creators need better tools",
+    "this video is interesting",
+    "I have a wallet setup question",
+    "when is the next event?",
+    "The new video is helpful, thanks!",
+    "Can someone review my complex workflow?",
+    "What should I read next about this bug report?",
+  ];
+  for (const message of unrelatedMessages) assert.equal(isClearGuideRequest(message), false, message);
+  assert.deepEqual(matchClearGuideRequest("where is the creator starter guide?"), { matched: true, reason: "starter_guide_location" });
 });
 
 test("onboarding prompt includes source-backed settings, voice, trigger, source text, and prior memory", () => {

@@ -9,12 +9,20 @@ import {
   type Message,
 } from "discord.js";
 
-import { getDevelopmentCreator } from "../../lib/youtube/server";
-import { getDiscordConnection } from "../../lib/data/discord-connection";
-import { persistDiscordMessage } from "../../lib/discord/import";
+import {
+  createDiscordListenerStorage,
+  getDevelopmentCreator,
+  getDiscordConnection,
+  getDiscordOnboardingSettings,
+  onboardingSettingsInput,
+  persistDiscordMessage,
+  type DiscordListenerStorage,
+} from "../../lib/discord/listener-storage";
 import type { DiscordMessage } from "../../lib/discord/client";
 import { readDiscordBotToken, type DiscordConfig } from "../../lib/discord/config";
-import { processDiscordOnboardingMessage } from "../../lib/discord/onboarding-service";
+import { isNetworkFailure } from "../../lib/discord/errors";
+import type { OnboardingSendMode } from "../../lib/discord/onboarding-types";
+import { processDiscordListenerOnboardingMessage } from "../../lib/discord/listener-onboarding";
 import {
   handleLiveDiscordMessage,
   type LiveDiscordListenerContext,
@@ -23,10 +31,16 @@ import {
 
 interface ListenerRuntime {
   creatorId: string;
+  connectionId: string;
   botToken: string;
   guildId: string;
   guildName: string;
   selectedChannelIds: string[];
+  storage: DiscordListenerStorage;
+  onboardingSettingsRowId: string | null;
+  onboardingEnabled: boolean;
+  onboardingSendMode: OnboardingSendMode;
+  onboardingQuestionChannelId: string | null;
 }
 
 function errorText(error: unknown): string {
@@ -44,26 +58,42 @@ function isMessageContentIntentError(error: unknown): boolean {
   return gatewayErrorCode(error) === 4014 || message.includes("disallowed intents") || message.includes("message content intent");
 }
 
+function gatewayFailureCategory(error: unknown): "discord_gateway_unavailable" | "network_fetch_failed" | "discord_gateway_error" {
+  const message = errorText(error).toLowerCase();
+  if (message.includes("enotfound") || message.includes("getaddrinfo") || message.includes("gateway-")) return "discord_gateway_unavailable";
+  if (isNetworkFailure(error)) return "network_fetch_failed";
+  return "discord_gateway_error";
+}
+
 function reportGatewayError(prefix: string, error: unknown): void {
   if (isMessageContentIntentError(error)) {
     console.error("Enable Message Content Intent in Discord Developer Portal for this bot.");
   }
-  console.error(`${prefix}: ${errorText(error)}`);
+  console.error(`${prefix}: ${gatewayFailureCategory(error)}`);
 }
 
 async function loadRuntime(): Promise<ListenerRuntime> {
-  const creator = await getDevelopmentCreator();
-  const connection = await getDiscordConnection(creator.id);
-  if (connection.error) throw new Error(connection.error);
-  if (!connection.data) throw new Error("Connect Discord before starting the live listener.");
-  const selectedChannelIds = [...new Set(connection.data.selected_channel_ids)];
+  const storage = createDiscordListenerStorage();
+  const creator = await getDevelopmentCreator(storage);
+  const connection = await getDiscordConnection(storage, creator.id);
+  if (!connection) throw new Error("Connect Discord before starting the live listener.");
+  const selectedChannelIds = [...new Set(connection.selected_channel_ids)];
   if (selectedChannelIds.length === 0) throw new Error("Select and save at least one Discord channel before starting the live listener.");
+  const onboardingRow = await getDiscordOnboardingSettings(storage, creator.id, connection.id);
+  const onboardingSettings = onboardingSettingsInput(onboardingRow);
+  console.log(`[discord listener] settings row_id=${onboardingRow?.id ?? "none"} creator_id=${creator.id} connection_id=${connection.id} guild_id=${connection.guild_id} enabled=${onboardingSettings.enabled} send_mode=${onboardingSettings.sendMode} question_channel_id=${onboardingSettings.questionChannelId ?? "null"}`);
   return {
     creatorId: creator.id,
+    connectionId: connection.id,
     botToken: readDiscordBotToken(),
-    guildId: connection.data.guild_id,
-    guildName: connection.data.guild_name,
+    guildId: connection.guild_id,
+    guildName: connection.guild_name,
     selectedChannelIds,
+    storage,
+    onboardingSettingsRowId: onboardingRow?.id ?? null,
+    onboardingEnabled: onboardingSettings.enabled,
+    onboardingSendMode: onboardingSettings.sendMode,
+    onboardingQuestionChannelId: onboardingSettings.questionChannelId,
   };
 }
 
@@ -144,6 +174,9 @@ async function main(): Promise<void> {
     guildId: runtime.guildId,
     selectedChannelIds: runtime.selectedChannelIds,
     botUserId: client.user?.id ?? null,
+    onboardingEnabled: runtime.onboardingEnabled,
+    onboardingSendMode: runtime.onboardingSendMode,
+    onboardingQuestionChannelId: runtime.onboardingQuestionChannelId,
   });
 
   client.once(Events.ClientReady, (readyClient) => {
@@ -161,14 +194,20 @@ async function main(): Promise<void> {
     if (!readyForMessages) return;
     const liveMessage = toLiveDiscordMessage(message);
     void handleLiveDiscordMessage(liveMessage, context(), {
-      persistMessage: async (event) => {
-        await persistDiscordMessage(runtime.creatorId, discordConfig, runtime.guildName, event.channel, toDiscordMessage(event));
+      persistMessage: async (event, options) => {
+        await persistDiscordMessage(runtime.storage, runtime.creatorId, discordConfig, runtime.guildName, event.channel, toDiscordMessage(event), options);
       },
-      runGuideRequest: (input) => processDiscordOnboardingMessage(runtime.creatorId, input),
+      logDecision: (decision) => {
+        if (decision.classification === "guide_request") return;
+        console.log(`[discord listener] settings row_id=${runtime.onboardingSettingsRowId ?? "none"} creator_id=${runtime.creatorId} connection_id=${runtime.connectionId} guild_id=${runtime.guildId} enabled=${runtime.onboardingEnabled} send_mode=${runtime.onboardingSendMode} message channel id=${decision.messageChannelId} question_channel_id=${decision.questionChannelId ?? "null"} trigger matched=${decision.triggerMatched} trigger reason=${decision.triggerReason}`);
+        if (decision.classification === "persist_only") console.log(`[discord listener] send decision: persisted_only reason=${decision.triggerMatched ? "channel_not_selected" : "trigger_not_matched"}`);
+      },
+      runGuideRequest: (input) => processDiscordListenerOnboardingMessage(runtime.storage, runtime.botToken, runtime.creatorId, input),
     }).then((result) => {
       const receipt = result.receipt ? ` receipt=${result.receipt.id}` : "";
       const sentMessage = result.receipt?.sent_message_id ? ` sent_message_id=${result.receipt.sent_message_id}` : "";
-      console.log(`Discord listener ${result.outcome}: message=${liveMessage.id}${receipt}${sentMessage}${result.error ? ` error=${result.error}` : ""}`);
+      const sentChannel = result.receipt?.status === "sent" ? ` sent_channel_id=${result.receipt.channel_id}` : "";
+      console.log(`Discord listener ${result.outcome}: message=${liveMessage.id}${receipt}${sentMessage}${sentChannel}${result.error ? ` error=${result.error}` : ""}`);
     }).catch((error) => {
       reportGatewayError(`Discord listener failed for message ${liveMessage.id}`, error);
     });

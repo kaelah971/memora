@@ -5,26 +5,22 @@ import type { DataResult } from "@/lib/data/types";
 import { discordAudienceMemberId, discordInteractionId, discordSourceId } from "@/lib/discord/ids";
 import { getDiscordConnection } from "@/lib/data/discord-connection";
 import {
-  isOnboardingSendMode,
   type OnboardingReceiptStatus,
-  type OnboardingSendMode,
   type OnboardingTriggerType,
 } from "@/lib/discord/onboarding-types";
+import {
+  discordOnboardingSettingsRow,
+  validateDiscordOnboardingSettings,
+  type DiscordOnboardingSettingsInput,
+} from "@/lib/discord/onboarding-settings";
+import { readDiscordOnboardingSettings, writeDiscordOnboardingSettings } from "@/lib/discord/onboarding-settings-storage";
 import type { Json, Tables, TablesInsert } from "@/lib/supabase/database.types";
+
+export { DEFAULT_BEGINNER_GUIDE_TEXT, defaultDiscordOnboardingSettings, onboardingSettingsInput } from "@/lib/discord/onboarding-settings";
+export type { DiscordOnboardingSettingsInput } from "@/lib/discord/onboarding-settings";
 
 export type DiscordOnboardingSettings = Tables<"discord_onboarding_settings">;
 export type DiscordOnboardingReceipt = Tables<"discord_onboarding_receipts">;
-
-export interface DiscordOnboardingSettingsInput {
-  enabled: boolean;
-  sendMode: OnboardingSendMode;
-  welcomeChannelId: string | null;
-  resourceChannelId: string | null;
-  questionChannelId: string | null;
-  supportChannelId: string | null;
-  builderChannelId: string | null;
-  beginnerGuideText: string;
-}
 
 export interface DiscordOnboardingMemory {
   member: Tables<"audience_members"> | null;
@@ -32,23 +28,8 @@ export interface DiscordOnboardingMemory {
   receipts: DiscordOnboardingReceipt[];
 }
 
-export const DEFAULT_BEGINNER_GUIDE_TEXT = "Start in #announcements, then ask questions in #creator-questions. Use #support if you get stuck.";
-
 function emptyAccessResult<T>(access: ReturnType<typeof getDevelopmentDataAccess>, data: T): DataResult<T> {
   return { data, access: access.status, error: access.status.reason };
-}
-
-export function defaultDiscordOnboardingSettings(): DiscordOnboardingSettingsInput {
-  return {
-    enabled: false,
-    sendMode: "draft_only",
-    welcomeChannelId: null,
-    resourceChannelId: null,
-    questionChannelId: null,
-    supportChannelId: null,
-    builderChannelId: null,
-    beginnerGuideText: DEFAULT_BEGINNER_GUIDE_TEXT,
-  };
 }
 
 export async function getDiscordOnboardingSettings(creatorId: string): Promise<DataResult<DiscordOnboardingSettings | null>> {
@@ -57,17 +38,8 @@ export async function getDiscordOnboardingSettings(creatorId: string): Promise<D
   const connection = await getDiscordConnection(creatorId);
   if (connection.error) return { data: null, access: connection.access, error: connection.error };
   if (!connection.data) return { data: null, access: connection.access, error: null };
-  const { data, error } = await access.client
-    .from("discord_onboarding_settings")
-    .select("*")
-    .eq("creator_id", creatorId)
-    .maybeSingle();
-  return { data, access: access.status, error: error?.message ?? null };
-}
-
-function configuredChannelId(value: string | null, selectedIds: Set<string>): string | null {
-  if (value === null || value === "") return null;
-  return selectedIds.has(value) ? value : null;
+  const result = await readDiscordOnboardingSettings(access.client, creatorId, connection.data.id);
+  return { data: result.data, access: access.status, error: result.error };
 }
 
 export async function saveDiscordOnboardingSettings(
@@ -76,43 +48,18 @@ export async function saveDiscordOnboardingSettings(
 ): Promise<DataResult<DiscordOnboardingSettings | null>> {
   const access = getDevelopmentDataAccess();
   if (!access.client) return emptyAccessResult(access, null);
-  if (!isOnboardingSendMode(input.sendMode)) return { data: null, access: access.status, error: "Choose a valid onboarding send mode." };
-  if (typeof input.beginnerGuideText !== "string" || input.beginnerGuideText.trim().length > 2_000) {
-    return { data: null, access: access.status, error: "Keep the beginner guide text under 2,000 characters." };
-  }
   const connection = await getDiscordConnection(creatorId);
   if (connection.error || !connection.data) {
     return { data: null, access: connection.access, error: connection.error ?? "Connect Discord before configuring onboarding." };
   }
   const selectedIds = new Set(connection.data.selected_channel_ids);
-  const channelValues = [
-    input.welcomeChannelId,
-    input.resourceChannelId,
-    input.questionChannelId,
-    input.supportChannelId,
-    input.builderChannelId,
-  ];
-  if (channelValues.some((value) => value !== null && value !== "" && !selectedIds.has(value))) {
-    return { data: null, access: access.status, error: "Onboarding channels must be selected and saved in the Discord connection first." };
-  }
-  const row: TablesInsert<"discord_onboarding_settings"> = {
-    creator_id: creatorId,
-    discord_connection_id: connection.data.id,
-    enabled: input.enabled,
-    send_mode: input.sendMode,
-    welcome_channel_id: configuredChannelId(input.welcomeChannelId, selectedIds),
-    resource_channel_id: configuredChannelId(input.resourceChannelId, selectedIds),
-    question_channel_id: configuredChannelId(input.questionChannelId, selectedIds),
-    support_channel_id: configuredChannelId(input.supportChannelId, selectedIds),
-    builder_channel_id: configuredChannelId(input.builderChannelId, selectedIds),
-    beginner_guide_text: input.beginnerGuideText.trim(),
-  };
-  const { data, error } = await access.client
-    .from("discord_onboarding_settings")
-    .upsert(row, { onConflict: "creator_id" })
-    .select("*")
-    .single();
-  return { data, access: access.status, error: error?.message ?? null };
+  const validation = validateDiscordOnboardingSettings(input, [...selectedIds]);
+  if (validation.error || !validation.data) return { data: null, access: access.status, error: validation.error ?? "Discord onboarding settings are invalid." };
+  const result = await writeDiscordOnboardingSettings(
+    access.client,
+    discordOnboardingSettingsRow(creatorId, connection.data.id, validation.data),
+  );
+  return { data: result.data, access: access.status, error: result.error };
 }
 
 export async function listDiscordOnboardingReceipts(
@@ -139,30 +86,14 @@ export async function findRecentDiscordOnboardingReceipt(input: {
 }): Promise<DataResult<DiscordOnboardingReceipt | null>> {
   const access = getDevelopmentDataAccess();
   if (!access.client) return emptyAccessResult(access, null);
-  const statuses: DiscordOnboardingReceipt["status"][] = ["drafted", "sent", "skipped"];
-  if (input.sourceMessageId) {
-    const sourceMatch = await access.client
-      .from("discord_onboarding_receipts")
-      .select("*")
-      .eq("creator_id", input.creatorId)
-      .eq("discord_connection_id", input.connectionId)
-      .eq("source_message_id", input.sourceMessageId)
-      .in("status", statuses)
-      .maybeSingle();
-    if (sourceMatch.error) return { data: null, access: access.status, error: sourceMatch.error.message };
-    if (sourceMatch.data) return { data: sourceMatch.data, access: access.status, error: null };
-  }
-  const cutoffDays = input.triggerType === "member_join" ? 30 : 1;
-  const cutoff = new Date(Date.now() - cutoffDays * 24 * 60 * 60 * 1_000).toISOString();
+  if (!input.sourceMessageId) return { data: null, access: access.status, error: null };
+
   const { data, error } = await access.client
     .from("discord_onboarding_receipts")
     .select("*")
     .eq("creator_id", input.creatorId)
     .eq("discord_connection_id", input.connectionId)
-    .eq("discord_user_id", input.discordUserId)
-    .eq("trigger_type", input.triggerType)
-    .gte("created_at", cutoff)
-    .in("status", statuses)
+    .eq("source_message_id", input.sourceMessageId)
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();

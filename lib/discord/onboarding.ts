@@ -26,6 +26,26 @@ export interface DiscordOnboardingPromptInput {
   sourceMessageText: string | null;
 }
 
+export interface ClearGuideRequestMatch {
+  matched: boolean;
+  reason: string;
+}
+
+const clearGuideRequestPatterns = [
+  { reason: "starter_guide_location", pattern: /\bwhere\s+(?:is|can\s+i\s+find)\s+(?:the\s+)?(?:creator\s+)?starter\s+guide\b/i },
+  { reason: "starter_guide_request", pattern: /\bcan\s+(?:you|someone)\s+(?:send|show|share)\s+(?:me\s+)?(?:the\s+)?(?:beginner|starter)\s+guide(?:\s+for\s+creators?)?\b/i },
+  { reason: "where_to_start", pattern: /\bwhere\s+(?:do|can|should)\s+i\s+start\b/i },
+  { reason: "new_member", pattern: /\b(?:i['’]?m|i am)\s+new\b/i },
+  { reason: "beginner_guide", pattern: /\b(?:is there|are there|any|some)\s+(?:a\s+)?(?:beginner|starter)?\s*guide\b/i },
+  { reason: "beginner_resources", pattern: /\b(?:beginner|starter)\s+resources?\b/i },
+  { reason: "resources", pattern: /\b(?:any|some)\s+resources?\b/i },
+  { reason: "how_to_start", pattern: /\bhow\s+(?:do|can)\s+i\s+(?:begin|start|get started)\b/i },
+  { reason: "where_to_read", pattern: /\bwhere\s+can\s+i\s+(?:read|find)\b/i },
+  { reason: "what_to_read_first", pattern: /\bwhat\s+should\s+i\s+read\s+first\b/i },
+  { reason: "help_getting_started", pattern: /\bhelp\s+me\s+(?:get\s+)?started\b/i },
+  { reason: "where_to_find_resources", pattern: /\bwhere\s+can\s+i\s+find\s+resources?\b/i },
+] as const;
+
 function clip(value: string, maxLength = MAX_PROMPT_VALUE_LENGTH): string {
   return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, " ").trim().slice(0, maxLength);
 }
@@ -35,17 +55,15 @@ function fact(label: string, value: string): string {
 }
 
 export function isClearGuideRequest(text: string): boolean {
+  return matchClearGuideRequest(text).matched;
+}
+
+export function matchClearGuideRequest(text: string): ClearGuideRequestMatch {
   const normalized = text.trim();
-  return [
-    /\bwhere\s+(?:do|can)\s+i\s+start\b/i,
-    /\b(?:i['’]?m|i am)\s+new\b/i,
-    /\b(?:is there|are there|any|some)\s+(?:a\s+)?guide\b/i,
-    /\b(?:any|some)\s+resources?\b/i,
-    /\bhow\s+(?:do|can)\s+i\s+(?:begin|start|get started)\b/i,
-    /\bwhere\s+can\s+i\s+(?:read|find)\b/i,
-    /\bhelp\s+me\s+(?:get\s+)?started\b/i,
-    /\bwhere\s+can\s+i\s+find\s+resources?\b/i,
-  ].some((pattern) => pattern.test(normalized));
+  const match = clearGuideRequestPatterns.find(({ pattern }) => pattern.test(normalized));
+  return match
+    ? { matched: true, reason: match.reason }
+    : { matched: false, reason: "no_supported_beginner_guide_phrase" };
 }
 
 export function buildDiscordOnboardingPrompt(input: DiscordOnboardingPromptInput): string {

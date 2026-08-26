@@ -1,15 +1,23 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import type { DiscordReadableChannel } from "@/lib/discord/channels";
 import { formatOnboardingMessageForDisplay } from "@/lib/discord/onboarding";
 import type { OnboardingReceiptStatus, OnboardingSendMode, OnboardingTriggerType } from "@/lib/discord/onboarding-types";
+import type { DiscordOnboardingSettingsView } from "@/lib/discord/onboarding-settings";
 import type { DiscordOnboardingReceipt, DiscordOnboardingSettingsInput } from "@/lib/data/discord-onboarding";
 
-interface DiscordOnboardingSettingsView extends DiscordOnboardingSettingsInput {
+export interface DiscordOnboardingDebugInfo {
+  creatorId: string;
   connectionId: string;
+  guildId: string;
+  selectedChannelIds: string[];
+  loadedRowId: string | null;
+  loadedUpdatedAt: string | null;
+  loadedEnabled: boolean;
+  loadedSendMode: OnboardingSendMode;
 }
 
 interface DiscordOnboardingSettingsProps {
@@ -18,6 +26,7 @@ interface DiscordOnboardingSettingsProps {
   initialSettings: DiscordOnboardingSettingsView | null;
   initialReceipts: DiscordOnboardingReceipt[];
   initialError: string | null;
+  debug: DiscordOnboardingDebugInfo | null;
 }
 
 const channelFields = [
@@ -52,14 +61,36 @@ export function DiscordOnboardingSettings({
   initialSettings,
   initialReceipts,
   initialError,
+  debug,
 }: DiscordOnboardingSettingsProps) {
   const router = useRouter();
   const [settings, setSettings] = useState<DiscordOnboardingSettingsView | null>(initialSettings);
+  const settingsDirty = useRef(false);
   const [localReceipts, setLocalReceipts] = useState<DiscordOnboardingReceipt[]>([]);
   const [username, setUsername] = useState("New member");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(initialError);
   const [notice, setNotice] = useState<string | null>(null);
+  const [saveResponse, setSaveResponse] = useState<{ rowId: string; updatedAt: string } | null>(null);
+
+  useEffect(() => {
+    if (!connectionId) return;
+    let cancelled = false;
+
+    void fetch("/api/discord/onboarding/settings", { cache: "no-store" })
+      .then(async (response) => {
+        const body = (await response.json().catch(() => null)) as { settings?: DiscordOnboardingSettingsView; error?: string } | null;
+        if (!response.ok || !body?.settings) throw new Error(body?.error ?? "Discord onboarding settings could not be loaded.");
+        if (!cancelled && !settingsDirty.current) setSettings(body.settings);
+      })
+      .catch(() => {
+        // The server-rendered settings remain authoritative if the client refresh request fails.
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionId, initialSettings]);
 
   const receipts = [
     ...localReceipts,
@@ -67,6 +98,7 @@ export function DiscordOnboardingSettings({
   ];
 
   function updateSetting<K extends keyof DiscordOnboardingSettingsInput>(key: K, value: DiscordOnboardingSettingsInput[K]): void {
+    settingsDirty.current = true;
     setSettings((current) => current ? { ...current, [key]: value } : current);
   }
 
@@ -84,6 +116,10 @@ export function DiscordOnboardingSettings({
       const body = (await response.json().catch(() => null)) as { settings?: DiscordOnboardingSettingsView; error?: string } | null;
       if (!response.ok || !body?.settings) throw new Error(body?.error ?? "Onboarding settings could not be saved.");
       setSettings(body.settings);
+      if (body.settings.rowId && body.settings.updatedAt) {
+        setSaveResponse({ rowId: body.settings.rowId, updatedAt: body.settings.updatedAt });
+      }
+      settingsDirty.current = false;
       setNotice("Onboarding settings saved.");
       router.refresh();
     } catch (requestError) {
@@ -193,6 +229,24 @@ export function DiscordOnboardingSettings({
         <span className="data-label">SAFETY BOUNDARY</span>
         <p>Import remains read-only. Assist/send is separate, limited to configured rules and saved channels, and every attempted message gets a receipt.</p>
       </div>
+
+      {debug ? (
+        <details className="discord-onboarding__debug">
+          <summary>Settings loaded</summary>
+          <dl>
+            <div><dt className="data-label">CREATOR ID</dt><dd>{debug.creatorId}</dd></div>
+            <div><dt className="data-label">CONNECTION ID</dt><dd>{debug.connectionId}</dd></div>
+            <div><dt className="data-label">GUILD ID</dt><dd>{debug.guildId}</dd></div>
+            <div><dt className="data-label">LOADED ROW ID</dt><dd>{settings?.rowId ?? debug.loadedRowId ?? "None"}</dd></div>
+            <div><dt className="data-label">LOADED UPDATED AT</dt><dd>{settings?.updatedAt ?? debug.loadedUpdatedAt ?? "None"}</dd></div>
+            <div><dt className="data-label">LOADED ENABLED</dt><dd>{String(settings?.enabled ?? debug.loadedEnabled)}</dd></div>
+            <div><dt className="data-label">LOADED SEND MODE</dt><dd>{settings?.sendMode ?? debug.loadedSendMode}</dd></div>
+            <div><dt className="data-label">SELECTED CHANNEL IDS</dt><dd>{debug.selectedChannelIds.join(", ") || "None"}</dd></div>
+            <div><dt className="data-label">SAVE RESPONSE ROW ID</dt><dd>{saveResponse?.rowId ?? "None"}</dd></div>
+            <div><dt className="data-label">SAVE RESPONSE UPDATED AT</dt><dd>{saveResponse?.updatedAt ?? "None"}</dd></div>
+          </dl>
+        </details>
+      ) : null}
 
       <section className="discord-onboarding__receipts" aria-labelledby="discord-onboarding-receipts-title">
         <div className="discord-onboarding__receipts-heading">

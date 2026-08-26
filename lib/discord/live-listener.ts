@@ -1,6 +1,10 @@
 import type { DiscordChannel, DiscordMessage } from "@/lib/discord/client";
-import type { DiscordOnboardingReceipt } from "@/lib/data/discord-onboarding";
-import { isClearGuideRequest } from "@/lib/discord/onboarding";
+import type { Tables } from "@/lib/supabase/database.types";
+import { matchClearGuideRequest } from "@/lib/discord/onboarding";
+import type { OnboardingSendMode } from "@/lib/discord/onboarding-types";
+import { isNetworkFailure } from "@/lib/discord/errors";
+
+type DiscordOnboardingReceipt = Tables<"discord_onboarding_receipts">;
 
 export interface LiveDiscordMessage {
   id: string;
@@ -15,6 +19,9 @@ export interface LiveDiscordListenerContext {
   guildId: string;
   selectedChannelIds: readonly string[];
   botUserId?: string | null;
+  onboardingEnabled?: boolean;
+  onboardingSendMode?: OnboardingSendMode;
+  onboardingQuestionChannelId?: string | null;
 }
 
 export type LiveDiscordMessageClassification =
@@ -49,8 +56,19 @@ export interface LiveDiscordMessageResult {
 }
 
 export interface LiveDiscordMessageDependencies {
-  persistMessage(message: LiveDiscordMessage): Promise<void>;
+  persistMessage(message: LiveDiscordMessage, options?: { allowUnmonitored?: boolean }): Promise<void>;
   runGuideRequest(input: LiveGuideRequestInput): Promise<LiveOnboardingRunResult>;
+  logDecision?(decision: LiveDiscordMessageDecision): void;
+}
+
+export interface LiveDiscordMessageDecision {
+  classification: LiveDiscordMessageClassification;
+  messageChannelId: string;
+  questionChannelId: string | null;
+  settingsEnabled: boolean | null;
+  sendMode: OnboardingSendMode | null;
+  triggerMatched: boolean;
+  triggerReason: string;
 }
 
 export function classifyLiveDiscordMessage(
@@ -60,12 +78,14 @@ export function classifyLiveDiscordMessage(
   if (context.botUserId && message.author.id === context.botUserId) return "ignored_self";
   if (message.author.bot) return "ignored_bot";
   if (!message.guildId || message.guildId !== context.guildId) return "ignored_guild";
-  if (!context.selectedChannelIds.includes(message.channel.id)) return "ignored_channel";
   if (!message.content.trim()) return "ignored_empty";
-  return isClearGuideRequest(message.content) ? "guide_request" : "persist_only";
+  const trigger = matchClearGuideRequest(message.content);
+  if (!context.selectedChannelIds.includes(message.channel.id)) return trigger.matched ? "persist_only" : "ignored_channel";
+  return trigger.matched ? "guide_request" : "persist_only";
 }
 
 function errorMessage(error: unknown): string {
+  if (isNetworkFailure(error)) return "network_fetch_failed";
   return error instanceof Error ? error.message : "The live Discord message could not be processed.";
 }
 
@@ -79,12 +99,22 @@ export async function handleLiveDiscordMessage(
   dependencies: LiveDiscordMessageDependencies,
 ): Promise<LiveDiscordMessageResult> {
   const classification = classifyLiveDiscordMessage(message, context);
+  const trigger = matchClearGuideRequest(message.content);
+  dependencies.logDecision?.({
+    classification,
+    messageChannelId: message.channel.id,
+    questionChannelId: context.onboardingQuestionChannelId ?? null,
+    settingsEnabled: context.onboardingEnabled ?? null,
+    sendMode: context.onboardingSendMode ?? null,
+    triggerMatched: trigger.matched,
+    triggerReason: trigger.reason,
+  });
   if (classification.startsWith("ignored_")) {
     return { classification, outcome: "ignored", receipt: null, error: null };
   }
 
   try {
-    await dependencies.persistMessage(message);
+    await dependencies.persistMessage(message, { allowUnmonitored: classification === "persist_only" && trigger.matched });
   } catch (error) {
     return { classification, outcome: "failed", receipt: null, error: errorMessage(error) };
   }

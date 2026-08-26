@@ -46,11 +46,12 @@ function receipt(status: DiscordOnboardingReceipt["status"]): DiscordOnboardingR
 
 function dependencies(
   onboarding: LiveOnboardingRunResult,
-  calls: { persisted: number; inputs: Array<{ sourceMessageId: string; sourceChannelId: string }> },
+  calls: { persisted: number; inputs: Array<{ sourceMessageId: string; sourceChannelId: string }>; persistOptions?: Array<{ allowUnmonitored?: boolean }> },
 ) {
   return {
-    persistMessage: async () => {
+    persistMessage: async (_message: LiveDiscordMessage, options?: { allowUnmonitored?: boolean }) => {
       calls.persisted += 1;
+      calls.persistOptions?.push(options ?? {});
     },
     runGuideRequest: async (input: { sourceMessageId: string; sourceChannelId: string }) => {
       calls.inputs.push(input);
@@ -71,16 +72,20 @@ test("live listener ignores bot and Memora messages", async () => {
 });
 
 test("live listener refuses unselected channels and other guilds", async () => {
-  const calls = { persisted: 0, inputs: [] as Array<{ sourceMessageId: string; sourceChannelId: string }> };
+  const calls = { persisted: 0, inputs: [] as Array<{ sourceMessageId: string; sourceChannelId: string }>, persistOptions: [] as Array<{ allowUnmonitored?: boolean }> };
   const deps = dependencies({ receipt: null, duplicate: false, ignored: false, error: null }, calls);
   const unselected = message({ channel: { ...channel, id: "1541890000000000000" } });
   const otherGuild = message({ guildId: "1541899999999999999" });
 
-  assert.equal(classifyLiveDiscordMessage(unselected, context), "ignored_channel");
+  assert.equal(classifyLiveDiscordMessage(unselected, context), "persist_only");
   assert.equal(classifyLiveDiscordMessage(otherGuild, context), "ignored_guild");
-  assert.equal((await handleLiveDiscordMessage(unselected, context, deps)).outcome, "ignored");
+  const unselectedResult = await handleLiveDiscordMessage(unselected, context, deps);
+  assert.equal(unselectedResult.outcome, "persisted");
+  assert.equal(unselectedResult.classification, "persist_only");
   assert.equal((await handleLiveDiscordMessage(otherGuild, context, deps)).outcome, "ignored");
-  assert.equal(calls.persisted, 0);
+  assert.equal(calls.persisted, 1);
+  assert.deepEqual(calls.persistOptions, [{ allowUnmonitored: true }]);
+  assert.equal(calls.inputs.length, 0);
 });
 
 test("live listener persists unrelated messages without auto-answering them", async () => {
@@ -141,4 +146,43 @@ test("live listener does not create a second reply for a duplicate message id", 
   assert.equal(result.receipt?.sent_message_id, "sent-message-1");
   assert.equal(calls.persisted, 1);
   assert.equal(calls.inputs.length, 1);
+});
+
+test("live listener processes the same guide request text when the Discord message id is new", async () => {
+  const calls = { persisted: 0, inputs: [] as Array<{ sourceMessageId: string; sourceChannelId: string }> };
+  const nextReceipt = { ...receipt("sent"), id: "receipt-2", source_message_id: "discord-message-2", sent_message_id: "sent-message-2" };
+  const result = await handleLiveDiscordMessage(
+    message({ id: "discord-message-2" }),
+    context,
+    dependencies({ receipt: nextReceipt, duplicate: false, ignored: false, error: null }, calls),
+  );
+
+  assert.equal(result.outcome, "sent");
+  assert.equal(result.receipt?.source_message_id, "discord-message-2");
+  assert.equal(calls.inputs[0]?.sourceMessageId, "discord-message-2");
+});
+
+test("live listener dispatches each explicit beginner-guide phrase to onboarding", async () => {
+  const guideRequests = [
+    "can someone show me the beginner guide?",
+    "please where should I start as a beginner creator?",
+    "I'm new here, where do I start?",
+    "where should I start?",
+    "how do I start?",
+    "what should I read first?",
+  ];
+
+  for (const [index, content] of guideRequests.entries()) {
+    const calls = { persisted: 0, inputs: [] as Array<{ sourceMessageId: string; sourceChannelId: string }> };
+    const result = await handleLiveDiscordMessage(
+      message({ id: `guide-request-${index}`, content }),
+      context,
+      dependencies({ receipt: receipt("sent"), duplicate: false, ignored: false, error: null }, calls),
+    );
+
+    assert.equal(result.classification, "guide_request", content);
+    assert.equal(result.outcome, "sent", content);
+    assert.equal(calls.persisted, 1, content);
+    assert.equal(calls.inputs.length, 1, content);
+  }
 });

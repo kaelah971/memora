@@ -22,6 +22,11 @@ export class DiscordIntegrationError extends Error {
   }
 }
 
+export function isNetworkFailure(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  return /fetch failed|network|eai_again|econnrefused|econnreset|etimedout|enotfound|getaddrinfo/i.test(error.message);
+}
+
 export function toDiscordIntegrationError(error: unknown): DiscordIntegrationError {
   if (error instanceof DiscordIntegrationError) return error;
   if (error instanceof DiscordConfigError) return new DiscordIntegrationError("CONFIGURATION", error.message, 503);

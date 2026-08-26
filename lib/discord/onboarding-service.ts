@@ -6,7 +6,6 @@ import {
 } from "@/lib/data/discord-connection";
 import {
   createDiscordOnboardingReceipt,
-  defaultDiscordOnboardingSettings,
   findRecentDiscordOnboardingReceipt,
   getDiscordMemberMemory,
   getDiscordOnboardingSettings,
@@ -17,6 +16,7 @@ import {
   type DiscordOnboardingReceipt,
   type DiscordOnboardingSettingsInput,
 } from "@/lib/data/discord-onboarding";
+import { onboardingSettingsInput } from "@/lib/discord/onboarding-settings";
 import { createDiscordApiClient } from "@/lib/discord/client";
 import { isClearGuideRequest, canAutoSendOnboarding, type OnboardingChannelContext } from "@/lib/discord/onboarding";
 import { readDiscordBotToken } from "@/lib/discord/config";
@@ -121,21 +121,13 @@ export async function loadDiscordOnboardingContext(creatorId: string): Promise<{
   if (creator.error || !creator.data) return { data: null, error: creator.error ?? "The creator workspace is not available." };
   const settingsResult = await getDiscordOnboardingSettings(creatorId);
   if (settingsResult.error) return { data: null, error: settingsResult.error };
-  const settings: DiscordOnboardingSettingsInput = settingsResult.data
-    ? {
-        enabled: settingsResult.data.enabled,
-        sendMode: settingsResult.data.send_mode,
-        welcomeChannelId: settingsResult.data.welcome_channel_id,
-        resourceChannelId: settingsResult.data.resource_channel_id,
-        questionChannelId: settingsResult.data.question_channel_id,
-        supportChannelId: settingsResult.data.support_channel_id,
-        builderChannelId: settingsResult.data.builder_channel_id,
-        beginnerGuideText: settingsResult.data.beginner_guide_text,
-      }
-    : defaultDiscordOnboardingSettings();
   const channelsResult = await listDiscordConnectionChannels(creatorId);
   if (channelsResult.error) return { data: null, error: channelsResult.error };
   const selectedChannels = channelsResult.data.filter((channel) => channel.selected);
+  const settings: DiscordOnboardingSettingsInput = onboardingSettingsInput(
+    settingsResult.data,
+    selectedChannels.map((channel) => channel.id),
+  );
   return {
     data: {
       creatorId,
