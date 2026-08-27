@@ -8,6 +8,7 @@ import type { YouTubeConnectionPublic } from "@/lib/youtube/types";
 
 export type YouTubeConnectionInsert = TablesInsert<"youtube_connections">;
 export type YouTubeConnectionUpdate = TablesUpdate<"youtube_connections">;
+export const YOUTUBE_CONNECTION_UPSERT_CONFLICT_TARGET = "workspace_id,youtube_channel_id" as const;
 
 type Environment = Record<string, string | undefined>;
 
@@ -137,11 +138,26 @@ export async function upsertYouTubeConnection(
   mode?: WorkspaceMode,
 ): Promise<Tables<"youtube_connections">> {
   const access = await getCurrentYouTubeAccess(connection.creator_id, mode);
-  const { data, error } = await access.client
+  const workspaceConnection = await access.client
     .from("youtube_connections")
-    .upsert({ ...connection, workspace_id: access.workspaceId }, { onConflict: "creator_id" })
-    .select("*")
-    .single();
+    .select("id")
+    .eq("creator_id", connection.creator_id)
+    .eq("workspace_id", access.workspaceId)
+    .maybeSingle();
+  if (workspaceConnection.error) throwStorageError("find_connection_for_upsert", workspaceConnection.error);
+
+  const payload = { ...connection, workspace_id: access.workspaceId };
+  const query = workspaceConnection.data
+    ? access.client
+      .from("youtube_connections")
+      .update(payload)
+      .eq("id", workspaceConnection.data.id)
+      .eq("creator_id", connection.creator_id)
+      .eq("workspace_id", access.workspaceId)
+    : access.client
+    .from("youtube_connections")
+      .upsert(payload, { onConflict: YOUTUBE_CONNECTION_UPSERT_CONFLICT_TARGET });
+  const { data, error } = await query.select("*").single();
 
   if (error) throwStorageError("upsert_connection", error);
   if (!data) throwStorageError("upsert_connection", new Error("Supabase returned no saved YouTube connection."));
