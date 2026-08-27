@@ -21,6 +21,7 @@ interface DiscordImportPanelProps {
   initialChannels: DiscordReadableChannel[];
   initialChannelError: string | null;
   initialLastImportedAt: string | null;
+  demoMode: boolean;
 }
 
 function formatDate(value: string | null): string {
@@ -35,6 +36,7 @@ export function DiscordImportPanel({
   initialChannels,
   initialChannelError,
   initialLastImportedAt,
+  demoMode,
 }: DiscordImportPanelProps) {
   const router = useRouter();
   const [connection, setConnection] = useState(initialConnection);
@@ -110,7 +112,7 @@ export function DiscordImportPanel({
     }
   }
 
-  const canImport = connection ? selectedChannelIds.size > 0 : config.ready;
+  const canImport = connection ? selectedChannelIds.size > 0 : demoMode && config.ready;
 
   return (
     <section className="discord-import" aria-labelledby="discord-import-panel-title" aria-busy={importing || loadingChannels || savingChannels}>
@@ -190,7 +192,7 @@ export function DiscordImportPanel({
         </section>
       )}
 
-      {connection ? <p className="discord-import__safety">The connected Discord server is user-selected. Imports are bounded, idempotent, and read-only.</p> : config.ready ? <p className="discord-import__safety">Developer demo mode is active. Connect a Discord server above to replace the env-configured channels.</p> : null}
+      {connection ? <p className="discord-import__safety">The connected Discord server is user-selected. Imports are bounded, idempotent, and read-only.</p> : demoMode && config.ready ? <p className="discord-import__safety">Public demo mode is active. Connect a Discord server above to replace the demo channels.</p> : null}
       {notice ? <p className="discord-import__notice" role="status">{notice}</p> : null}
       {error ? <p className="discord-import__error" role="alert">{error}</p> : null}
 

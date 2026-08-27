@@ -19,18 +19,19 @@ export async function generateDiscordOnboardingMessage(
   input: DiscordOnboardingPromptInput,
 ): Promise<DiscordOnboardingGeneration> {
   const config = readMindsConfig();
+  const alias = input.conversationAlias?.trim() || config.alias;
   const client = createAuthenticatedMindsClient(config);
   const mind = await client.getMind(config.mindId);
   if (mind.isEnabled === false) {
     throw new MindsIntegrationError("API", "The configured Memora Mind is disabled.", { status: 503 });
   }
-  const conversation = await client.ensureConversation(config.alias, config.mindId);
-  const resolvedMindId = await client.getMindIdForAlias(config.alias);
+  const conversation = await client.ensureConversation(alias, config.mindId);
+  const resolvedMindId = await client.getMindIdForAlias(alias);
   if (resolvedMindId && resolvedMindId !== config.mindId) {
     throw new MindsIntegrationError("API", "The configured Memora Mind alias resolved to a different Mind.", { status: 409 });
   }
   const prompt = buildDiscordOnboardingPrompt(input);
-  const capture = await sendAndPollForMindReply(client, config.alias, prompt);
+  const capture = await sendAndPollForMindReply(client, alias, prompt);
   if (!capture.response) {
     throw new MindsIntegrationError("TIMEOUT", "Memora Mind did not return onboarding guidance before the safe timeout.", { status: 504 });
   }

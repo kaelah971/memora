@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 import { BrowserWindow } from "@/components/memora/browser-window";
 import { PrimaryButton } from "@/components/memora/primary-button";
 import { WindowNavigation, type WindowNavItem } from "@/components/memora/window-navigation";
+import { WorkspaceSwitcher } from "@/components/memora/workspace-switcher";
 
 const appNavigation = [
   { href: "/app", label: "HOME" },
@@ -33,7 +34,10 @@ export function AppShell({ children }: AppShellProps) {
           MEMORA
         </Link>
         <div className="app-shell__header-meta">
-          <span className="data-label">CREATOR WORKSPACE</span>
+          <div className="app-shell__demo-note">
+            <span className="data-label">PUBLIC HACKATHON DEMO WORKSPACE</span>
+            <span>Full self-serve creator accounts are future work.</span>
+          </div>
           <PrimaryButton href="/">BACK TO STORY</PrimaryButton>
         </div>
       </header>
@@ -42,7 +46,12 @@ export function AppShell({ children }: AppShellProps) {
           <WindowNavigation
             items={appNavigation}
             activeHref={activeHref}
-            action={<a className="window-navigation__settings" href="/app/settings">SETTINGS</a>}
+            action={
+              <div className="window-navigation__workspace-actions">
+                <WorkspaceSwitcher />
+                <a className="window-navigation__settings" href="/app/settings">SETTINGS</a>
+              </div>
+            }
           />
           {children}
         </BrowserWindow>

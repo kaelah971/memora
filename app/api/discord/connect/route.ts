@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
 
-import { getDevelopmentCreator } from "@/lib/youtube/server";
 import {
   buildDiscordAuthorizeUrl,
   createDiscordOAuthState,
@@ -10,6 +9,8 @@ import {
   toDiscordIntegrationError,
   DISCORD_OAUTH_STATE_COOKIE,
 } from "@/lib/discord/server";
+import { DiscordIntegrationError } from "@/lib/discord/errors";
+import { getCurrentIntegrationWorkspaceContext } from "@/lib/workspaces/access";
 
 function redirectToImport(request: Request, reason?: string) {
   const url = new URL("/app/import/discord", request.url);
@@ -19,7 +20,8 @@ function redirectToImport(request: Request, reason?: string) {
 
 export async function GET(request: Request) {
   try {
-    await getDevelopmentCreator();
+    const context = await getCurrentIntegrationWorkspaceContext();
+    if (!context.data) throw new DiscordIntegrationError("AUTH_REQUIRED", context.error ?? "Sign in before connecting Discord.", 401);
     const status = getDiscordOAuthConfigStatus();
     if (!status.ready) return redirectToImport(request, "oauth_config_missing");
     const config = readDiscordOAuthConfig();

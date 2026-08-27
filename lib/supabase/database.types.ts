@@ -26,9 +26,59 @@ type TableDefinition<Row, Insert, Update> = {
 export interface Database {
   public: {
     Tables: {
+      workspaces: TableDefinition<
+        {
+          id: string;
+          name: string;
+          created_by: string | null;
+          slug: string | null;
+          is_demo: boolean;
+          created_at: string;
+          updated_at: string;
+        },
+        {
+          id?: string;
+          name: string;
+          created_by?: string | null;
+          slug?: string | null;
+          is_demo?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        },
+        {
+          id?: string;
+          name?: string;
+          created_by?: string | null;
+          slug?: string | null;
+          is_demo?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        }
+      >;
+      workspace_members: TableDefinition<
+        {
+          workspace_id: string;
+          user_id: string;
+          role: "owner" | "member";
+          created_at: string;
+        },
+        {
+          workspace_id: string;
+          user_id: string;
+          role?: "owner" | "member";
+          created_at?: string;
+        },
+        {
+          workspace_id?: string;
+          user_id?: string;
+          role?: "owner" | "member";
+          created_at?: string;
+        }
+      >;
       creators: TableDefinition<
         {
           id: string;
+          workspace_id?: string;
           user_id: string | null;
           display_name: string;
           slug: string | null;
@@ -39,6 +89,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id: string;
           user_id?: string | null;
           display_name: string;
           slug?: string | null;
@@ -49,6 +100,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           user_id?: string | null;
           display_name?: string;
           slug?: string | null;
@@ -61,6 +113,7 @@ export interface Database {
       discord_connections: TableDefinition<
         {
           id: string;
+          workspace_id?: string;
           creator_id: string;
           guild_id: string;
           guild_name: string;
@@ -72,6 +125,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           creator_id: string;
           guild_id: string;
           guild_name: string;
@@ -83,6 +137,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           creator_id?: string;
           guild_id?: string;
           guild_name?: string;
@@ -96,6 +151,7 @@ export interface Database {
       discord_onboarding_settings: TableDefinition<
         {
           id: string;
+          workspace_id?: string;
           creator_id: string;
           discord_connection_id: string;
           enabled: boolean;
@@ -111,6 +167,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           creator_id: string;
           discord_connection_id: string;
           enabled?: boolean;
@@ -126,6 +183,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           creator_id?: string;
           discord_connection_id?: string;
           enabled?: boolean;
@@ -143,6 +201,7 @@ export interface Database {
       discord_onboarding_receipts: TableDefinition<
         {
           id: string;
+          workspace_id?: string;
           creator_id: string;
           discord_connection_id: string;
           guild_id: string;
@@ -160,6 +219,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           creator_id: string;
           discord_connection_id: string;
           guild_id: string;
@@ -177,6 +237,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           creator_id?: string;
           discord_connection_id?: string;
           guild_id?: string;
@@ -196,6 +257,7 @@ export interface Database {
       sources: TableDefinition<
         {
           id: string;
+          workspace_id?: string;
           creator_id: string;
           platform: Platform;
           source_type: SourceType;
@@ -210,6 +272,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           creator_id: string;
           platform: Platform;
           source_type: SourceType;
@@ -224,6 +287,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           creator_id?: string;
           platform?: Platform;
           source_type?: SourceType;
@@ -240,6 +304,7 @@ export interface Database {
       audience_members: TableDefinition<
         {
           id: string;
+          workspace_id?: string;
           creator_id: string;
           platform: Platform;
           platform_user_id: string | null;
@@ -252,6 +317,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           creator_id: string;
           platform: Platform;
           platform_user_id?: string | null;
@@ -264,6 +330,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           creator_id?: string;
           platform?: Platform;
           platform_user_id?: string | null;
@@ -278,6 +345,7 @@ export interface Database {
       interactions: TableDefinition<
         {
           id: string;
+          workspace_id?: string;
           creator_id: string;
           audience_member_id: string;
           source_id: string;
@@ -296,6 +364,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           creator_id: string;
           audience_member_id: string;
           source_id: string;
@@ -314,6 +383,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           creator_id?: string;
           audience_member_id?: string;
           source_id?: string;
@@ -334,6 +404,7 @@ export interface Database {
       unresolved_questions: TableDefinition<
         {
           id: string;
+          workspace_id?: string;
           creator_id: string;
           audience_member_id: string;
           interaction_id: string;
@@ -348,6 +419,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           creator_id: string;
           audience_member_id: string;
           interaction_id: string;
@@ -362,6 +434,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           creator_id?: string;
           audience_member_id?: string;
           interaction_id?: string;
@@ -378,6 +451,7 @@ export interface Database {
       creator_events: TableDefinition<
         {
           id: string;
+          workspace_id?: string;
           creator_id: string;
           event_type: CreatorEventType;
           source_id: string | null;
@@ -392,6 +466,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           creator_id: string;
           event_type: CreatorEventType;
           source_id?: string | null;
@@ -406,6 +481,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           creator_id?: string;
           event_type?: CreatorEventType;
           source_id?: string | null;
@@ -422,6 +498,7 @@ export interface Database {
       creator_actions: TableDefinition<
         {
           id: string;
+          workspace_id?: string;
           creator_id: string;
           audience_member_id: string | null;
           interaction_id: string | null;
@@ -435,6 +512,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           creator_id: string;
           audience_member_id?: string | null;
           interaction_id?: string | null;
@@ -448,6 +526,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           creator_id?: string;
           audience_member_id?: string | null;
           interaction_id?: string | null;
@@ -463,6 +542,7 @@ export interface Database {
       follow_up_mind_reasoning: TableDefinition<
         {
           id: string;
+          workspace_id?: string;
           creator_id: string;
           opportunity_id: string;
           interaction_id: string;
@@ -476,6 +556,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           creator_id: string;
           opportunity_id: string;
           interaction_id: string;
@@ -489,6 +570,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           creator_id?: string;
           opportunity_id?: string;
           interaction_id?: string;
@@ -504,6 +586,7 @@ export interface Database {
       youtube_connections: TableDefinition<
         {
           id: string;
+          workspace_id?: string;
           creator_id: string;
           google_account_id: string | null;
           youtube_channel_id: string;
@@ -520,6 +603,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           creator_id: string;
           google_account_id?: string | null;
           youtube_channel_id: string;
@@ -536,6 +620,7 @@ export interface Database {
         },
         {
           id?: string;
+          workspace_id?: string;
           creator_id?: string;
           google_account_id?: string | null;
           youtube_channel_id?: string;

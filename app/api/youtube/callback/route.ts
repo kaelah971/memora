@@ -4,13 +4,14 @@ import { readYouTubeConfig } from "@/lib/youtube/config";
 import { encryptYouTubeToken } from "@/lib/youtube/tokens";
 import {
   exchangeYouTubeOAuthCode,
-  getDevelopmentCreator,
   getYouTubeConnection,
   isValidOAuthState,
   toYouTubeIntegrationError,
   upsertYouTubeConnection,
   YOUTUBE_OAUTH_STATE_COOKIE,
 } from "@/lib/youtube/server";
+import { getCurrentIntegrationWorkspaceContext } from "@/lib/workspaces/access";
+import { YouTubeIntegrationError } from "@/lib/youtube/errors";
 
 function redirectToImport(request: Request, reason?: string) {
   const url = new URL("/app/import", request.url);
@@ -47,7 +48,9 @@ export async function GET(request: NextRequest) {
   if (!code) return clearStateCookie(redirectToImport(request, "invalid_request"));
 
   try {
-    const creator = await getDevelopmentCreator();
+    const context = await getCurrentIntegrationWorkspaceContext();
+    if (!context.data) throw new YouTubeIntegrationError("auth_required", 401, context.error ?? "Sign in before connecting YouTube.");
+    const creator = context.data.creator;
     const { channel, tokens } = await exchangeYouTubeOAuthCode(code);
     const config = readYouTubeConfig();
     const existingConnection = await getYouTubeConnection(creator.id);

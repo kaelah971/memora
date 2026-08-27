@@ -29,6 +29,7 @@ import {
   updateOnboardingMemoryStatus,
 } from "@/lib/discord/listener-storage";
 import type { DiscordOnboardingGeneration } from "@/lib/minds/onboarding";
+import { getCreatorMindAlias } from "@/lib/workspaces/aliases";
 
 export interface DiscordListenerOnboardingContext {
   creatorId: string;
@@ -40,6 +41,7 @@ export interface DiscordListenerOnboardingContext {
   settingsRowId: string | null;
   monitoredChannelIds: string[];
   channels: OnboardingChannelContext[];
+  mindAlias?: string;
 }
 
 const inFlightSourceMessageIds = new Set<string>();
@@ -179,6 +181,7 @@ export async function loadDiscordListenerOnboardingContext(
     settingsRowId: settingsRow?.id ?? null,
     monitoredChannelIds: selectedChannels.map((channel) => channel.id),
     channels: labeledChannels(settings, readableChannels, selectedChannels.map((channel) => channel.id)),
+    mindAlias: getCreatorMindAlias(creator),
   };
 }
 
@@ -257,6 +260,7 @@ async function runForMember(
       triggerType: input.triggerType,
       priorMemory: priorMemoryText(memory),
       sourceMessageText: input.sourceMessageText,
+      conversationAlias: context.mindAlias ?? "memora-demo-main",
     });
     generatedMessage = generation.message;
     mindConversationId = generation.conversationId;

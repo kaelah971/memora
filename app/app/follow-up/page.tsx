@@ -69,9 +69,9 @@ export default async function FollowUpPage() {
             <FollowUpQueue opportunities={queueResult.data.opportunities} />
           ) : (
             <ProductEmptyState
-              eyebrow={queueResult.data.dataOrigin === "none" ? "NO SOURCE MOMENTS" : "NO CLEAR MATCHES"}
-              title={queueResult.data.dataOrigin === "none" ? "Import a comment to start the thread." : "No transparent follow-up match yet."}
-              description={queueResult.data.dataOrigin === "none" ? "Fetch recent videos and import comments from the Import page. Memora will only create a card when a question and later creator event share a clear source or topic connection." : "The queue found source records but no question and later creator event connected by the current transparent heuristics. Nothing has been invented."}
+              eyebrow={queueResult.data.dataOrigin === "none" ? "NO OPPORTUNITIES YET" : "NO CLEAR MATCHES"}
+              title={queueResult.data.dataOrigin === "none" ? "No opportunities yet." : "No transparent follow-up match yet."}
+              description={queueResult.data.dataOrigin === "none" ? "Import source-backed moments from YouTube or Discord. Memora will only create a card when a question and later creator event share a clear source or topic connection." : "The queue found source records but no question and later creator event connected by the current transparent heuristics. Nothing has been invented."}
               href="/app/import"
               actionLabel="Open import"
             />

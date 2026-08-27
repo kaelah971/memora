@@ -19,7 +19,7 @@ const notices: Record<string, string> = {
   oauth_denied: "YouTube authorization was cancelled. You can try again whenever you are ready.",
   invalid_state: "The authorization window expired or could not be verified. Start a new connection.",
   config_missing: "Add the documented Google OAuth and token-encryption variables to .env.local before connecting.",
-  workspace_unavailable: "The creator workspace is unavailable. Run the seed and set MEMORA_DEMO_WORKSPACE_ACCESS=enabled on the server for a production hackathon demo.",
+  workspace_unavailable: "Sign in to connect your own YouTube channel, or choose View Demo Workspace for the public proof workspace.",
   auth_required: "Reconnect YouTube so Memora can read comments with the current permission.",
 };
 

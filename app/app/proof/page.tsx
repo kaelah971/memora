@@ -2,6 +2,7 @@ import { AppScreen } from "@/components/memora/app-screen";
 import { DataSetupState } from "@/components/memora/data-setup-state";
 import { JudgeProof } from "@/components/memora/judge-proof";
 import { ProductEmptyState } from "@/components/memora/product-empty-state";
+import { WorkspaceSetupChecklist } from "@/components/memora/workspace-setup-checklist";
 import { loadJudgeProof } from "@/lib/data/judge-proof";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,8 @@ export default async function ProofPage() {
           href="/app/import"
           actionLabel="Open import"
         />
+      ) : proofResult.data.ingestion.dataOrigin === "none" && proofResult.data.audience.length === 0 && proofResult.data.queue.total === 0 ? (
+        <WorkspaceSetupChecklist />
       ) : (
         <JudgeProof proof={proofResult.data} />
       )}

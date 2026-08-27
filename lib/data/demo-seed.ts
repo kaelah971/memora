@@ -2,6 +2,7 @@ import type { TablesInsert } from "@/lib/supabase/database.types";
 import type { DataClient } from "@/lib/data/types";
 
 export const DEMO_IDS = {
+  workspace: "00000000-0000-4000-8000-000000000001",
   creator: "10000000-0000-4000-8000-000000000001",
   sourceLivestream: "20000000-0000-4000-8000-000000000001",
   sourceMayaSetup: "20000000-0000-4000-8000-000000000002",
@@ -43,6 +44,7 @@ export interface DemoSeedSummary {
 export async function seedDemoData(client: DataClient): Promise<DemoSeedSummary> {
   const creator: TablesInsert<"creators"> = {
     id: DEMO_IDS.creator,
+    workspace_id: DEMO_IDS.workspace,
     display_name: "Memora Demo Creator",
     slug: "memora-demo",
     timezone: "UTC",
@@ -51,6 +53,7 @@ export async function seedDemoData(client: DataClient): Promise<DemoSeedSummary>
     {
       id: DEMO_IDS.sourceLivestream,
       creator_id: DEMO_IDS.creator,
+      workspace_id: DEMO_IDS.workspace,
       platform: "youtube_live",
       source_type: "livestream",
       external_id: "demo-livestream-2026-08-03",
@@ -61,6 +64,7 @@ export async function seedDemoData(client: DataClient): Promise<DemoSeedSummary>
     {
       id: DEMO_IDS.sourceMayaSetup,
       creator_id: DEMO_IDS.creator,
+      workspace_id: DEMO_IDS.workspace,
       platform: "youtube",
       source_type: "video",
       external_id: "demo-video-setup",
@@ -71,6 +75,7 @@ export async function seedDemoData(client: DataClient): Promise<DemoSeedSummary>
     {
       id: DEMO_IDS.sourceMayaWorkflow,
       creator_id: DEMO_IDS.creator,
+      workspace_id: DEMO_IDS.workspace,
       platform: "youtube",
       source_type: "video",
       external_id: "demo-video-workflow",
@@ -81,6 +86,7 @@ export async function seedDemoData(client: DataClient): Promise<DemoSeedSummary>
     {
       id: DEMO_IDS.sourceMayaTools,
       creator_id: DEMO_IDS.creator,
+      workspace_id: DEMO_IDS.workspace,
       platform: "youtube",
       source_type: "video",
       external_id: "demo-video-tools",
@@ -91,6 +97,7 @@ export async function seedDemoData(client: DataClient): Promise<DemoSeedSummary>
     {
       id: DEMO_IDS.sourceAlexWorkflow,
       creator_id: DEMO_IDS.creator,
+      workspace_id: DEMO_IDS.workspace,
       platform: "manual",
       source_type: "demo_dataset",
       external_id: "demo-content-beginner-editing-workflow",
@@ -103,6 +110,7 @@ export async function seedDemoData(client: DataClient): Promise<DemoSeedSummary>
     {
       id: DEMO_IDS.alex,
       creator_id: DEMO_IDS.creator,
+      workspace_id: DEMO_IDS.workspace,
       platform: "youtube_live",
       platform_user_id: "demo-youtube-alex",
       display_name: "Alex",
@@ -112,6 +120,7 @@ export async function seedDemoData(client: DataClient): Promise<DemoSeedSummary>
     {
       id: DEMO_IDS.maya,
       creator_id: DEMO_IDS.creator,
+      workspace_id: DEMO_IDS.workspace,
       platform: "youtube",
       platform_user_id: "demo-youtube-maya",
       display_name: "Maya",
@@ -121,6 +130,7 @@ export async function seedDemoData(client: DataClient): Promise<DemoSeedSummary>
     {
       id: DEMO_IDS.jordan,
       creator_id: DEMO_IDS.creator,
+      workspace_id: DEMO_IDS.workspace,
       platform: "youtube_live",
       platform_user_id: "demo-youtube-jordan",
       display_name: "Jordan",
@@ -132,6 +142,7 @@ export async function seedDemoData(client: DataClient): Promise<DemoSeedSummary>
     {
       id: DEMO_IDS.alexLivestreamInteraction,
       creator_id: DEMO_IDS.creator,
+      workspace_id: DEMO_IDS.workspace,
       audience_member_id: DEMO_IDS.alex,
       source_id: DEMO_IDS.sourceLivestream,
       platform: "youtube_live",
@@ -145,6 +156,7 @@ export async function seedDemoData(client: DataClient): Promise<DemoSeedSummary>
     {
       id: DEMO_IDS.mayaSetupInteraction,
       creator_id: DEMO_IDS.creator,
+      workspace_id: DEMO_IDS.workspace,
       audience_member_id: DEMO_IDS.maya,
       source_id: DEMO_IDS.sourceMayaSetup,
       platform: "youtube",
@@ -158,6 +170,7 @@ export async function seedDemoData(client: DataClient): Promise<DemoSeedSummary>
     {
       id: DEMO_IDS.mayaWorkflowInteraction,
       creator_id: DEMO_IDS.creator,
+      workspace_id: DEMO_IDS.workspace,
       audience_member_id: DEMO_IDS.maya,
       source_id: DEMO_IDS.sourceMayaWorkflow,
       platform: "youtube",
@@ -171,6 +184,7 @@ export async function seedDemoData(client: DataClient): Promise<DemoSeedSummary>
     {
       id: DEMO_IDS.mayaToolsInteraction,
       creator_id: DEMO_IDS.creator,
+      workspace_id: DEMO_IDS.workspace,
       audience_member_id: DEMO_IDS.maya,
       source_id: DEMO_IDS.sourceMayaTools,
       platform: "youtube",
@@ -184,6 +198,7 @@ export async function seedDemoData(client: DataClient): Promise<DemoSeedSummary>
     {
       id: DEMO_IDS.jordanLivestreamInteraction,
       creator_id: DEMO_IDS.creator,
+      workspace_id: DEMO_IDS.workspace,
       audience_member_id: DEMO_IDS.jordan,
       source_id: DEMO_IDS.sourceLivestream,
       platform: "youtube_live",
@@ -199,6 +214,7 @@ export async function seedDemoData(client: DataClient): Promise<DemoSeedSummary>
     {
       id: DEMO_IDS.alexQuestion,
       creator_id: DEMO_IDS.creator,
+      workspace_id: DEMO_IDS.workspace,
       audience_member_id: DEMO_IDS.alex,
       interaction_id: DEMO_IDS.alexLivestreamInteraction,
       question_text: "What editing software should beginners use?",
@@ -207,6 +223,7 @@ export async function seedDemoData(client: DataClient): Promise<DemoSeedSummary>
     {
       id: DEMO_IDS.jordanQuestion,
       creator_id: DEMO_IDS.creator,
+      workspace_id: DEMO_IDS.workspace,
       audience_member_id: DEMO_IDS.jordan,
       interaction_id: DEMO_IDS.jordanLivestreamInteraction,
       question_text: "Will you share the toolkit you use for client projects?",
@@ -216,6 +233,7 @@ export async function seedDemoData(client: DataClient): Promise<DemoSeedSummary>
   const creatorEvent: TablesInsert<"creator_events"> = {
     id: DEMO_IDS.creatorEvent,
     creator_id: DEMO_IDS.creator,
+    workspace_id: DEMO_IDS.workspace,
     event_type: "content_published",
     source_id: DEMO_IDS.sourceAlexWorkflow,
     external_id: "demo-event-beginner-editing-workflow",

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getDevelopmentDataAccess } from "@/lib/data/access";
+import { getCurrentDataAccess } from "@/lib/data/access";
 import type { DataResult } from "@/lib/data/types";
 import { discordAudienceMemberId, discordInteractionId, discordSourceId } from "@/lib/discord/ids";
 import { getDiscordConnection } from "@/lib/data/discord-connection";
@@ -28,17 +28,20 @@ export interface DiscordOnboardingMemory {
   receipts: DiscordOnboardingReceipt[];
 }
 
-function emptyAccessResult<T>(access: ReturnType<typeof getDevelopmentDataAccess>, data: T): DataResult<T> {
+function emptyAccessResult<T>(access: Awaited<ReturnType<typeof getCurrentDataAccess>>, data: T): DataResult<T> {
   return { data, access: access.status, error: access.status.reason };
 }
 
 export async function getDiscordOnboardingSettings(creatorId: string): Promise<DataResult<DiscordOnboardingSettings | null>> {
-  const access = getDevelopmentDataAccess();
-  if (!access.client) return emptyAccessResult(access, null);
+  const access = await getCurrentDataAccess();
+  const workspaceId = access.workspaceId;
+  if (!access.client || !workspaceId || access.creatorId !== creatorId) {
+    return emptyAccessResult(access, null);
+  }
   const connection = await getDiscordConnection(creatorId);
   if (connection.error) return { data: null, access: connection.access, error: connection.error };
   if (!connection.data) return { data: null, access: connection.access, error: null };
-  const result = await readDiscordOnboardingSettings(access.client, creatorId, connection.data.id);
+  const result = await readDiscordOnboardingSettings(access.client, creatorId, connection.data.id, workspaceId);
   return { data: result.data, access: access.status, error: result.error };
 }
 
@@ -46,8 +49,11 @@ export async function saveDiscordOnboardingSettings(
   creatorId: string,
   input: DiscordOnboardingSettingsInput,
 ): Promise<DataResult<DiscordOnboardingSettings | null>> {
-  const access = getDevelopmentDataAccess();
-  if (!access.client) return emptyAccessResult(access, null);
+  const access = await getCurrentDataAccess();
+  const workspaceId = access.workspaceId;
+  if (!access.client || !workspaceId || access.creatorId !== creatorId) {
+    return emptyAccessResult(access, null);
+  }
   const connection = await getDiscordConnection(creatorId);
   if (connection.error || !connection.data) {
     return { data: null, access: connection.access, error: connection.error ?? "Connect Discord before configuring onboarding." };
@@ -57,7 +63,7 @@ export async function saveDiscordOnboardingSettings(
   if (validation.error || !validation.data) return { data: null, access: access.status, error: validation.error ?? "Discord onboarding settings are invalid." };
   const result = await writeDiscordOnboardingSettings(
     access.client,
-    discordOnboardingSettingsRow(creatorId, connection.data.id, validation.data),
+    { ...discordOnboardingSettingsRow(creatorId, connection.data.id, validation.data), workspace_id: workspaceId },
   );
   return { data: result.data, access: access.status, error: result.error };
 }
@@ -66,12 +72,14 @@ export async function listDiscordOnboardingReceipts(
   creatorId: string,
   limit = 12,
 ): Promise<DataResult<DiscordOnboardingReceipt[]>> {
-  const access = getDevelopmentDataAccess();
-  if (!access.client) return emptyAccessResult(access, []);
+  const access = await getCurrentDataAccess();
+  const workspaceId = access.workspaceId;
+  if (!access.client || !workspaceId || access.creatorId !== creatorId) return emptyAccessResult(access, []);
   const { data, error } = await access.client
     .from("discord_onboarding_receipts")
     .select("*")
     .eq("creator_id", creatorId)
+    .eq("workspace_id", workspaceId)
     .order("created_at", { ascending: false })
     .limit(Math.max(1, Math.min(50, Math.floor(limit))));
   return { data: data ?? [], access: access.status, error: error?.message ?? null };
@@ -84,14 +92,16 @@ export async function findRecentDiscordOnboardingReceipt(input: {
   triggerType: OnboardingTriggerType;
   sourceMessageId: string | null;
 }): Promise<DataResult<DiscordOnboardingReceipt | null>> {
-  const access = getDevelopmentDataAccess();
-  if (!access.client) return emptyAccessResult(access, null);
+  const access = await getCurrentDataAccess();
+  const workspaceId = access.workspaceId;
+  if (!access.client || !workspaceId || access.creatorId !== input.creatorId) return emptyAccessResult(access, null);
   if (!input.sourceMessageId) return { data: null, access: access.status, error: null };
 
   const { data, error } = await access.client
     .from("discord_onboarding_receipts")
     .select("*")
     .eq("creator_id", input.creatorId)
+    .eq("workspace_id", workspaceId)
     .eq("discord_connection_id", input.connectionId)
     .eq("source_message_id", input.sourceMessageId)
     .order("created_at", { ascending: false })
@@ -103,11 +113,12 @@ export async function findRecentDiscordOnboardingReceipt(input: {
 export async function createDiscordOnboardingReceipt(
   receipt: TablesInsert<"discord_onboarding_receipts">,
 ): Promise<DataResult<DiscordOnboardingReceipt | null>> {
-  const access = getDevelopmentDataAccess();
-  if (!access.client) return emptyAccessResult(access, null);
+  const access = await getCurrentDataAccess();
+  const workspaceId = access.workspaceId;
+  if (!access.client || !workspaceId || access.creatorId !== receipt.creator_id) return emptyAccessResult(access, null);
   const { data, error } = await access.client
     .from("discord_onboarding_receipts")
-    .insert(receipt)
+    .insert({ ...receipt, workspace_id: workspaceId })
     .select("*")
     .single();
   return { data, access: access.status, error: error?.message ?? null };
@@ -117,12 +128,14 @@ export async function updateDiscordOnboardingReceipt(
   receiptId: string,
   update: Partial<Pick<DiscordOnboardingReceipt, "mind_conversation_id" | "sent_message_id" | "status" | "reason">>,
 ): Promise<DataResult<DiscordOnboardingReceipt | null>> {
-  const access = getDevelopmentDataAccess();
-  if (!access.client) return emptyAccessResult(access, null);
+  const access = await getCurrentDataAccess();
+  const workspaceId = access.workspaceId;
+  if (!access.client || !workspaceId) return emptyAccessResult(access, null);
   const { data, error } = await access.client
     .from("discord_onboarding_receipts")
     .update(update)
     .eq("id", receiptId)
+    .eq("workspace_id", workspaceId)
     .select("*")
     .single();
   return { data, access: access.status, error: error?.message ?? null };
@@ -132,13 +145,15 @@ export async function getDiscordMemberMemory(
   creatorId: string,
   discordUserId: string,
 ): Promise<DataResult<DiscordOnboardingMemory>> {
-  const access = getDevelopmentDataAccess();
+  const access = await getCurrentDataAccess();
   const empty: DiscordOnboardingMemory = { member: null, interactions: [], receipts: [] };
-  if (!access.client) return emptyAccessResult(access, empty);
+  const workspaceId = access.workspaceId;
+  if (!access.client || !workspaceId || access.creatorId !== creatorId) return emptyAccessResult(access, empty);
   const memberResult = await access.client
     .from("audience_members")
     .select("*")
     .eq("creator_id", creatorId)
+    .eq("workspace_id", workspaceId)
     .eq("platform", "discord")
     .eq("platform_user_id", discordUserId)
     .maybeSingle();
@@ -146,9 +161,9 @@ export async function getDiscordMemberMemory(
   const member = memberResult.data;
   const [interactionsResult, receiptsResult] = await Promise.all([
     member
-      ? access.client.from("interactions").select("*").eq("creator_id", creatorId).eq("audience_member_id", member.id).order("published_at", { ascending: false }).limit(12)
+       ? access.client.from("interactions").select("*").eq("creator_id", creatorId).eq("workspace_id", workspaceId).eq("audience_member_id", member.id).order("published_at", { ascending: false }).limit(12)
       : Promise.resolve({ data: [], error: null }),
-    access.client.from("discord_onboarding_receipts").select("*").eq("creator_id", creatorId).eq("discord_user_id", discordUserId).order("created_at", { ascending: false }).limit(12),
+    access.client.from("discord_onboarding_receipts").select("*").eq("creator_id", creatorId).eq("workspace_id", workspaceId).eq("discord_user_id", discordUserId).order("created_at", { ascending: false }).limit(12),
   ]);
   const error = interactionsResult.error ?? receiptsResult.error;
   return {
@@ -167,13 +182,14 @@ export async function listRecentDiscordInteractions(
   channelIds: string[],
   limit = 50,
 ): Promise<DataResult<Array<{ interaction: Tables<"interactions">; member: Tables<"audience_members"> | null }>>> {
-  const access = getDevelopmentDataAccess();
+  const access = await getCurrentDataAccess();
   const empty: Array<{ interaction: Tables<"interactions">; member: Tables<"audience_members"> | null }> = [];
-  if (!access.client) return emptyAccessResult(access, empty);
+  const workspaceId = access.workspaceId;
+  if (!access.client || !workspaceId || access.creatorId !== creatorId) return emptyAccessResult(access, empty);
   if (channelIds.length === 0) return { data: empty, access: access.status, error: null };
   const [interactionsResult, membersResult] = await Promise.all([
-    access.client.from("interactions").select("*").eq("creator_id", creatorId).eq("platform", "discord").order("published_at", { ascending: false }).limit(Math.max(1, Math.min(100, limit))),
-    access.client.from("audience_members").select("*").eq("creator_id", creatorId).eq("platform", "discord"),
+    access.client.from("interactions").select("*").eq("creator_id", creatorId).eq("workspace_id", workspaceId).eq("platform", "discord").order("published_at", { ascending: false }).limit(Math.max(1, Math.min(100, limit))),
+    access.client.from("audience_members").select("*").eq("creator_id", creatorId).eq("workspace_id", workspaceId).eq("platform", "discord"),
   ]);
   const error = interactionsResult.error ?? membersResult.error;
   if (error) return { data: empty, access: access.status, error: error.message };
@@ -201,13 +217,15 @@ export async function recordOnboardingMemory(input: {
   status: OnboardingReceiptStatus;
   sentMessageId: string | null;
 }): Promise<DataResult<{ interactionId: string } | null>> {
-  const access = getDevelopmentDataAccess();
-  if (!access.client) return emptyAccessResult(access, null);
+  const access = await getCurrentDataAccess();
+  const workspaceId = access.workspaceId;
+  if (!access.client || !workspaceId || access.creatorId !== input.creatorId) return emptyAccessResult(access, null);
   const now = new Date().toISOString();
   const sourceId = discordSourceId(input.creatorId, input.guildId, input.channelId);
   const source: TablesInsert<"sources"> = {
     id: sourceId,
     creator_id: input.creatorId,
+    workspace_id: workspaceId,
     platform: "discord",
     source_type: "discord_channel",
     external_id: input.channelId,
@@ -226,11 +244,12 @@ export async function recordOnboardingMemory(input: {
   if (sourceResult.error || !sourceResult.data) return { data: null, access: access.status, error: sourceResult.error?.message ?? "The onboarding source could not be saved." };
 
   const memberId = discordAudienceMemberId(input.creatorId, input.discordUserId);
-  const existingMember = await access.client.from("audience_members").select("first_seen_at, last_seen_at").eq("id", memberId).maybeSingle();
+  const existingMember = await access.client.from("audience_members").select("first_seen_at, last_seen_at").eq("id", memberId).eq("creator_id", input.creatorId).eq("workspace_id", workspaceId).maybeSingle();
   if (existingMember.error) return { data: null, access: access.status, error: existingMember.error.message };
   const member: TablesInsert<"audience_members"> = {
     id: memberId,
     creator_id: input.creatorId,
+    workspace_id: workspaceId,
     platform: "discord",
     platform_user_id: input.discordUserId,
     display_name: input.discordUsername,
@@ -245,6 +264,7 @@ export async function recordOnboardingMemory(input: {
   const interaction: TablesInsert<"interactions"> = {
     id: interactionId,
     creator_id: input.creatorId,
+    workspace_id: workspaceId,
     audience_member_id: memberId,
     source_id: sourceId,
     platform: "discord",
@@ -277,14 +297,15 @@ export async function updateOnboardingMemoryStatus(
   status: OnboardingReceiptStatus,
   sentMessageId: string | null,
 ): Promise<DataResult<boolean>> {
-  const access = getDevelopmentDataAccess();
-  if (!access.client) return emptyAccessResult(access, false);
-  const existing = await access.client.from("interactions").select("raw_metadata").eq("id", interactionId).maybeSingle();
+  const access = await getCurrentDataAccess();
+  const workspaceId = access.workspaceId;
+  if (!access.client || !workspaceId) return emptyAccessResult(access, false);
+  const existing = await access.client.from("interactions").select("raw_metadata").eq("id", interactionId).eq("workspace_id", workspaceId).maybeSingle();
   if (existing.error) return { data: false, access: access.status, error: existing.error.message };
   const rawMetadata = existing.data?.raw_metadata;
   const metadata: Record<string, Json | undefined> = rawMetadata && isRecord(rawMetadata) ? rawMetadata : {};
   const { error } = await access.client.from("interactions").update({
     raw_metadata: { ...metadata, onboarding_status: status, sent_message_id: sentMessageId },
-  }).eq("id", interactionId);
+  }).eq("id", interactionId).eq("workspace_id", workspaceId);
   return { data: !error, access: access.status, error: error?.message ?? null };
 }

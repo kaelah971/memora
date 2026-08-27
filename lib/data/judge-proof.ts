@@ -1,6 +1,7 @@
 import "server-only";
 
-import { getDevelopmentDataAccess } from "@/lib/data/access";
+import { getCurrentDataAccess } from "@/lib/data/access";
+import { getCurrentWorkspaceContext } from "@/lib/workspaces/access";
 import type { DataResult } from "@/lib/data/types";
 import {
   buildJudgeProofData,
@@ -11,34 +12,32 @@ import {
 export type { JudgeAudienceInteraction, JudgeAudienceRecord, JudgeProofData } from "@/lib/data/judge-proof-builder";
 
 export async function loadJudgeProof(): Promise<DataResult<JudgeProofData>> {
-  const access = getDevelopmentDataAccess();
+  const access = await getCurrentDataAccess();
   const emptyData = emptyJudgeProofData();
   if (!access.client) return { data: emptyData, access: access.status, error: access.status.reason };
 
-  const creatorResult = await access.client
-    .from("creators")
-    .select("*")
-    .eq("slug", "memora-demo")
-    .maybeSingle();
-  if (creatorResult.error) return { data: emptyData, access: access.status, error: creatorResult.error.message };
-  if (!creatorResult.data) return { data: emptyData, access: access.status, error: null };
+  const context = await getCurrentWorkspaceContext();
+  if (context.error || !context.data) return { data: emptyData, access: context.access, error: context.error };
+  const creatorResult = { data: context.data.creator };
 
   const creatorId = creatorResult.data.id;
+  const workspaceId = context.data.workspace.id;
   const [connectionResult, sourcesResult, membersResult, interactionsResult, questionsResult, eventsResult, actionsResult, discordConnectionResult, onboardingSettingsResult, onboardingReceiptsResult] = await Promise.all([
     access.client
       .from("youtube_connections")
       .select("youtube_channel_id, youtube_channel_title")
       .eq("creator_id", creatorId)
+      .eq("workspace_id", workspaceId)
       .maybeSingle(),
-    access.client.from("sources").select("*").eq("creator_id", creatorId),
-    access.client.from("audience_members").select("*").eq("creator_id", creatorId),
-    access.client.from("interactions").select("*").eq("creator_id", creatorId),
-    access.client.from("unresolved_questions").select("*").eq("creator_id", creatorId),
-    access.client.from("creator_events").select("*").eq("creator_id", creatorId),
-    access.client.from("creator_actions").select("*").eq("creator_id", creatorId),
-    access.client.from("discord_connections").select("guild_id, selected_channel_ids").eq("creator_id", creatorId).maybeSingle(),
-    access.client.from("discord_onboarding_settings").select("enabled, send_mode").eq("creator_id", creatorId).maybeSingle(),
-    access.client.from("discord_onboarding_receipts").select("*").eq("creator_id", creatorId).order("created_at", { ascending: false }),
+    access.client.from("sources").select("*").eq("creator_id", creatorId).eq("workspace_id", workspaceId),
+    access.client.from("audience_members").select("*").eq("creator_id", creatorId).eq("workspace_id", workspaceId),
+    access.client.from("interactions").select("*").eq("creator_id", creatorId).eq("workspace_id", workspaceId),
+    access.client.from("unresolved_questions").select("*").eq("creator_id", creatorId).eq("workspace_id", workspaceId),
+    access.client.from("creator_events").select("*").eq("creator_id", creatorId).eq("workspace_id", workspaceId),
+    access.client.from("creator_actions").select("*").eq("creator_id", creatorId).eq("workspace_id", workspaceId),
+    access.client.from("discord_connections").select("guild_id, selected_channel_ids").eq("creator_id", creatorId).eq("workspace_id", workspaceId).maybeSingle(),
+    access.client.from("discord_onboarding_settings").select("enabled, send_mode").eq("creator_id", creatorId).eq("workspace_id", workspaceId).maybeSingle(),
+    access.client.from("discord_onboarding_receipts").select("*").eq("creator_id", creatorId).eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
   ]);
   const queryError = [connectionResult, sourcesResult, membersResult, interactionsResult, questionsResult, eventsResult, actionsResult, discordConnectionResult, onboardingSettingsResult, onboardingReceiptsResult].find(
     (result) => result.error,
@@ -59,7 +58,7 @@ export async function loadJudgeProof(): Promise<DataResult<JudgeProofData>> {
       onboardingSettings: onboardingSettingsResult.data,
       onboardingReceipts: onboardingReceiptsResult.data ?? [],
     }),
-    access: access.status,
+    access: context.access,
     error: null,
   };
 }

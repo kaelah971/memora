@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { getDevelopmentCreator } from "@/lib/youtube/server";
 import { createDiscordApiClient } from "@/lib/discord/client";
 import {
   exchangeDiscordOAuthCode,
@@ -12,6 +11,8 @@ import {
   saveDiscordConnection,
   DISCORD_OAUTH_STATE_COOKIE,
 } from "@/lib/discord/server";
+import { DiscordIntegrationError } from "@/lib/discord/errors";
+import { getCurrentIntegrationWorkspaceContext } from "@/lib/workspaces/access";
 
 function redirectToImport(request: Request, reason?: string) {
   const url = new URL("/app/import/discord", request.url);
@@ -68,12 +69,14 @@ export async function GET(request: NextRequest) {
     const guild = await client.getGuild();
     if (guild.id !== guildId) throw new Error("The installed Discord guild could not be verified.");
 
-    const creator = await getDevelopmentCreator();
+    const context = await getCurrentIntegrationWorkspaceContext();
+    if (!context.data) throw new DiscordIntegrationError("AUTH_REQUIRED", context.error ?? "Sign in before connecting Discord.", 401);
+    const creator = context.data.creator;
     const saved = await saveDiscordConnection({
       creator_id: creator.id,
       guild_id: guild.id,
       guild_name: guild.name,
-      installed_by_user_id: null,
+      installed_by_user_id: context.data.user?.id ?? null,
       selected_channel_ids: [],
       last_import_at: null,
     });

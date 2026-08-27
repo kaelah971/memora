@@ -1,6 +1,6 @@
 import type { TablesInsert } from "@/lib/supabase/database.types";
 
-import { getDevelopmentDataAccess } from "@/lib/data/access";
+import { getCurrentDataAccess } from "@/lib/data/access";
 import { readDiscordConfig, type DiscordConfig } from "@/lib/discord/config";
 import {
   createDiscordApiClient,
@@ -105,8 +105,11 @@ export async function importDiscordMessages(
   requestedLimit = 50,
   apiClient: DiscordApiClient = createDiscordApiClient(config),
 ): Promise<DiscordImportSummary> {
-  const access = getDevelopmentDataAccess();
-  if (!access.client) throw new DiscordIntegrationError("STORAGE", access.status.reason ?? "Discord database access is unavailable.", 503);
+  const access = await getCurrentDataAccess();
+  if (!access.client || !access.workspaceId || access.creatorId !== creatorId) {
+    throw new DiscordIntegrationError("STORAGE", access.status.reason ?? "The creator profile does not belong to the active workspace.", 503);
+  }
+  const workspaceId = access.workspaceId;
 
   const guild = await apiClient.getGuild();
   if (guild.id !== config.guildId) {
@@ -125,6 +128,7 @@ export async function importDiscordMessages(
   const sourceRows: TablesInsert<"sources">[] = fetchedByChannel.map(({ channel }) => ({
     id: discordSourceId(creatorId, config.guildId, channel.id),
     creator_id: creatorId,
+    workspace_id: workspaceId,
     platform: "discord",
     source_type: "discord_channel",
     external_id: channel.id,
@@ -178,10 +182,10 @@ export async function importDiscordMessages(
   const eventExternalIds = eventMessages.map(({ message }) => message.id);
   const [existingInteractionsResult, existingEventsResult] = await Promise.all([
     interactionExternalIds.length > 0
-      ? access.client.from("interactions").select("external_id").eq("creator_id", creatorId).eq("platform", "discord").in("external_id", interactionExternalIds)
+       ? access.client.from("interactions").select("external_id").eq("creator_id", creatorId).eq("workspace_id", workspaceId).eq("platform", "discord").in("external_id", interactionExternalIds)
       : Promise.resolve({ data: [], error: null }),
     eventExternalIds.length > 0
-      ? access.client.from("creator_events").select("external_id").eq("creator_id", creatorId).eq("event_type", "product_update").in("external_id", eventExternalIds)
+       ? access.client.from("creator_events").select("external_id").eq("creator_id", creatorId).eq("workspace_id", workspaceId).eq("event_type", "product_update").in("external_id", eventExternalIds)
       : Promise.resolve({ data: [], error: null }),
   ]);
   if (existingInteractionsResult.error || existingEventsResult.error) {
@@ -197,6 +201,7 @@ export async function importDiscordMessages(
     memberRows.set(id, {
       id,
       creator_id: creatorId,
+      workspace_id: workspaceId,
       platform: "discord",
       platform_user_id: message.author.id,
       display_name: displayName(message),
@@ -207,7 +212,7 @@ export async function importDiscordMessages(
   }
   const memberIds = [...memberRows.keys()];
   const existingMembersResult = memberIds.length > 0
-    ? await access.client.from("audience_members").select("id, first_seen_at, last_seen_at").eq("creator_id", creatorId).eq("platform", "discord").in("id", memberIds)
+     ? await access.client.from("audience_members").select("id, first_seen_at, last_seen_at").eq("creator_id", creatorId).eq("workspace_id", workspaceId).eq("platform", "discord").in("id", memberIds)
     : { data: [], error: null };
   if (existingMembersResult.error) throw new DiscordIntegrationError("STORAGE", "Discord community members could not be checked.", 500);
   const existingMembers = new Map((existingMembersResult.data ?? []).map((member) => [member.id, member]));
@@ -227,6 +232,7 @@ export async function importDiscordMessages(
   const interactionRows: TablesInsert<"interactions">[] = interactionMessages.map(({ channel, message, occurredAt }) => ({
     id: discordInteractionId(creatorId, message.id),
     creator_id: creatorId,
+    workspace_id: workspaceId,
     audience_member_id: discordAudienceMemberId(creatorId, message.author.id),
     source_id: sourceIdByChannel.get(channel.id) as string,
     platform: "discord",
@@ -255,6 +261,7 @@ export async function importDiscordMessages(
   const eventRows: TablesInsert<"creator_events">[] = eventMessages.map(({ channel, message, occurredAt }) => ({
     id: discordCreatorEventId(creatorId, message.id),
     creator_id: creatorId,
+    workspace_id: workspaceId,
     event_type: "product_update",
     source_id: sourceIdByChannel.get(channel.id) as string,
     external_id: message.id,

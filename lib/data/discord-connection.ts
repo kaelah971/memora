@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getDevelopmentDataAccess } from "@/lib/data/access";
+import { getCurrentDataAccess } from "@/lib/data/access";
 import type { DataResult } from "@/lib/data/types";
 import { createDiscordApiClient } from "@/lib/discord/client";
 import { selectConnectedChannelIds, type DiscordReadableChannel } from "@/lib/discord/channels";
@@ -16,22 +16,29 @@ function emptyChannels(): DiscordReadableChannel[] {
 }
 
 export async function getDiscordConnection(creatorId: string): Promise<DataResult<DiscordConnection | null>> {
-  const access = getDevelopmentDataAccess();
-  if (!access.client) return { data: null, access: access.status, error: access.status.reason };
+  const access = await getCurrentDataAccess();
+  const workspaceId = access.workspaceId;
+  if (!access.client || !workspaceId || access.creatorId !== creatorId) {
+    return { data: null, access: access.status, error: access.status.reason ?? "The creator profile does not belong to the active workspace." };
+  }
   const { data, error } = await access.client
     .from("discord_connections")
     .select("*")
     .eq("creator_id", creatorId)
+    .eq("workspace_id", workspaceId)
     .maybeSingle();
   return { data, access: access.status, error: error?.message ?? null };
 }
 
 export async function saveDiscordConnection(connection: TablesInsert<"discord_connections">): Promise<DataResult<DiscordConnection | null>> {
-  const access = getDevelopmentDataAccess();
-  if (!access.client) return { data: null, access: access.status, error: access.status.reason };
+  const access = await getCurrentDataAccess();
+  const workspaceId = access.workspaceId;
+  if (!access.client || !workspaceId || access.creatorId !== connection.creator_id) {
+    return { data: null, access: access.status, error: access.status.reason ?? "The Discord connection does not belong to the active workspace." };
+  }
   const { data, error } = await access.client
     .from("discord_connections")
-    .upsert(connection, { onConflict: "creator_id" })
+    .upsert({ ...connection, workspace_id: workspaceId }, { onConflict: "creator_id" })
     .select("*")
     .single();
   return { data, access: access.status, error: error?.message ?? null };
@@ -53,24 +60,30 @@ export async function saveDiscordSelectedChannels(
       error: "One or more selected Discord channels are not available from the connected guild.",
     };
   }
-  const access = getDevelopmentDataAccess();
-  if (!access.client) return { data: null, access: access.status, error: access.status.reason };
+  const access = await getCurrentDataAccess();
+  const workspaceId = access.workspaceId;
+  if (!access.client || !workspaceId || access.creatorId !== creatorId) {
+    return { data: null, access: access.status, error: access.status.reason ?? "The creator profile does not belong to the active workspace." };
+  }
   const { data, error } = await access.client
     .from("discord_connections")
     .update({ selected_channel_ids: selection.selected })
     .eq("creator_id", creatorId)
+    .eq("workspace_id", workspaceId)
     .select("*")
     .single();
   return { data, access: access.status, error: error?.message ?? null };
 }
 
 export async function markDiscordConnectionImported(creatorId: string): Promise<void> {
-  const access = getDevelopmentDataAccess();
-  if (!access.client) return;
+  const access = await getCurrentDataAccess();
+  const workspaceId = access.workspaceId;
+  if (!access.client || !workspaceId || access.creatorId !== creatorId) return;
   await access.client
     .from("discord_connections")
     .update({ last_import_at: new Date().toISOString() })
-    .eq("creator_id", creatorId);
+    .eq("creator_id", creatorId)
+    .eq("workspace_id", workspaceId);
 }
 
 export async function listDiscordConnectionChannels(creatorId: string): Promise<DataResult<DiscordReadableChannel[]>> {

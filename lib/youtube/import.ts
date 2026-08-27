@@ -11,7 +11,7 @@ import {
   getExistingCreatorEventIds,
   getExistingInteractionIds,
   getExistingSourceIds,
-  getTrustedYouTubeClient,
+   getCurrentYouTubeAccess,
   markYouTubeSynced,
 } from "@/lib/youtube/storage";
 import type { YouTubeCommentFact, YouTubeImportSummary } from "@/lib/youtube/types";
@@ -35,18 +35,21 @@ export async function importYouTubeVideoComments(
 ): Promise<YouTubeImportSummary> {
   const video = await getOwnedYouTubeVideo(creatorId, videoId);
   const { comments, pagesFetched } = await fetchYouTubeComments(creatorId, videoId, requestedLimit);
-  const client = getTrustedYouTubeClient();
+  const access = await getCurrentYouTubeAccess(creatorId);
+  const client = access.client;
+  const workspaceId = access.workspaceId;
   const sourceId = deterministicYouTubeUuid(`source:${creatorId}:youtube:${video.id}`);
   const creatorEventId = deterministicYouTubeUuid(`creator-event:${creatorId}:youtube:${video.id}`);
   const interactionIds = comments.map((comment) =>
     deterministicYouTubeUuid(`interaction:${creatorId}:youtube:${comment.commentId}`),
   );
-  const existingInteractions = await getExistingInteractionIds(interactionIds);
+  const existingInteractions = await getExistingInteractionIds(creatorId, interactionIds);
   const counts = countKnownYouTubeComments(interactionIds, existingInteractions);
 
   const source: TablesInsert<"sources"> = {
     id: sourceId,
     creator_id: creatorId,
+    workspace_id: workspaceId,
     platform: "youtube",
     source_type: "video",
     external_id: video.id,
@@ -74,6 +77,7 @@ export async function importYouTubeVideoComments(
     memberById.set(id, {
       id,
       creator_id: creatorId,
+      workspace_id: workspaceId,
       platform: "youtube",
       platform_user_id: comment.authorChannelId,
       display_name: comment.authorDisplayName ?? "YouTube commenter (identity unavailable)",
@@ -84,7 +88,7 @@ export async function importYouTubeVideoComments(
   }
 
   const memberIds = [...memberById.keys()];
-  const existingMembers = await getExistingAudienceMembers(memberIds);
+  const existingMembers = await getExistingAudienceMembers(creatorId, memberIds);
   const audienceResult = await client
     .from("audience_members")
     .upsert([...memberById.values()], { onConflict: "id" });
@@ -99,6 +103,7 @@ export async function importYouTubeVideoComments(
   const interactions: TablesInsert<"interactions">[] = comments.map((comment, index) => ({
     id: interactionIds[index],
     creator_id: creatorId,
+    workspace_id: workspaceId,
     audience_member_id: memberIdByIdentity.get(comment.commentId) as string,
     source_id: sourceId,
     platform: "youtube",
@@ -117,10 +122,11 @@ export async function importYouTubeVideoComments(
 
   let creatorEventCreated = false;
   if (video.publishedAt) {
-    const existingEvents = await getExistingCreatorEventIds([creatorEventId]);
+    const existingEvents = await getExistingCreatorEventIds(creatorId, [creatorEventId]);
     const creatorEvent: TablesInsert<"creator_events"> = {
       id: creatorEventId,
       creator_id: creatorId,
+      workspace_id: workspaceId,
       event_type: "content_published",
       source_id: sourceId,
       external_id: video.id,

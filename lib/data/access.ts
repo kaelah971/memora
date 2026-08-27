@@ -8,6 +8,8 @@ import type { DataAccessStatus, DataClient } from "@/lib/data/types";
 export interface DevelopmentDataAccess {
   client: DataClient | null;
   status: DataAccessStatus;
+  workspaceId: string | null;
+  creatorId: string | null;
 }
 
 type Environment = Record<string, string | undefined>;
@@ -20,6 +22,8 @@ export function getDevelopmentDataAccess(environment: Environment = process.env)
     return {
       client: null,
       status: productionAccessBlock,
+      workspaceId: null,
+      creatorId: null,
     };
   }
 
@@ -31,6 +35,8 @@ export function getDevelopmentDataAccess(environment: Environment = process.env)
         mode: "unavailable",
         reason: "Configure Supabase public variables and SUPABASE_SERVICE_ROLE_KEY for server-side data access.",
       },
+      workspaceId: null,
+      creatorId: null,
     };
   }
 
@@ -42,6 +48,8 @@ export function getDevelopmentDataAccess(environment: Environment = process.env)
         mode: "unavailable",
         reason: "Set MEMORA_DEV_DB_ACCESS=service_role to explicitly enable local database reads.",
       },
+      workspaceId: null,
+      creatorId: null,
     };
   }
 
@@ -49,6 +57,8 @@ export function getDevelopmentDataAccess(environment: Environment = process.env)
     return {
       client: createServiceRoleSupabaseClient(environment),
       status: { available: true, mode: "service_role", reason: null },
+      workspaceId: null,
+      creatorId: null,
     };
   } catch (error) {
     return {
@@ -58,6 +68,23 @@ export function getDevelopmentDataAccess(environment: Environment = process.env)
         mode: "unavailable",
         reason: error instanceof Error ? error.message : "Supabase configuration could not be loaded.",
       },
+      workspaceId: null,
+      creatorId: null,
     };
   }
+}
+
+export async function getCurrentDataAccess(): Promise<DevelopmentDataAccess> {
+  const { getCurrentWorkspaceContext } = await import("@/lib/workspaces/access");
+  const context = await getCurrentWorkspaceContext();
+  return {
+    client: context.data?.client ?? null,
+    status: context.access,
+    workspaceId: context.data?.workspace.id ?? null,
+    creatorId: context.data?.creator.id ?? null,
+  };
+}
+
+export function isCurrentCreatorAccess(access: DevelopmentDataAccess, creatorId: string): boolean {
+  return Boolean(access.client && access.workspaceId && access.creatorId === creatorId);
 }

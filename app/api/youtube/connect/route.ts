@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 
 import {
   createOAuthState,
-  getDevelopmentCreator,
   getYouTubeAuthorizationUrl,
   toYouTubeIntegrationError,
   YOUTUBE_OAUTH_STATE_COOKIE,
 } from "@/lib/youtube/server";
+import { getCurrentIntegrationWorkspaceContext } from "@/lib/workspaces/access";
+import { YouTubeIntegrationError } from "@/lib/youtube/errors";
 
 function redirectToImport(request: Request, reason?: string) {
   const url = new URL("/app/import", request.url);
@@ -16,7 +17,8 @@ function redirectToImport(request: Request, reason?: string) {
 
 export async function GET(request: Request) {
   try {
-    await getDevelopmentCreator();
+    const context = await getCurrentIntegrationWorkspaceContext();
+    if (!context.data) throw new YouTubeIntegrationError("auth_required", 401, context.error ?? "Sign in before connecting YouTube.");
     const state = createOAuthState();
     const response = NextResponse.redirect(getYouTubeAuthorizationUrl(state));
     response.cookies.set({

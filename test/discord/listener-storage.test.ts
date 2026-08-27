@@ -74,6 +74,7 @@ test("same Discord message id is the only persistent duplicate key", async () =>
   assert.deepEqual(filters, [
     ["creator_id", "creator-1"],
     ["discord_connection_id", "connection-1"],
+    ["workspace_id", "00000000-0000-4000-8000-000000000001"],
     ["source_message_id", "discord-message-1"],
   ]);
 });

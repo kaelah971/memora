@@ -1,5 +1,5 @@
 import type { Tables } from "@/lib/supabase/database.types";
-import { getDevelopmentDataAccess } from "@/lib/data/access";
+import { getCurrentDataAccess } from "@/lib/data/access";
 import type { DataResult } from "@/lib/data/types";
 
 export interface AudienceHistory {
@@ -12,29 +12,36 @@ export interface AudienceHistory {
 export async function listAudienceMembers(
   creatorId: string,
 ): Promise<DataResult<AudienceHistory[]>> {
-  const access = getDevelopmentDataAccess();
-  if (!access.client) return { data: [], access: access.status, error: access.status.reason };
+  const access = await getCurrentDataAccess();
+  const workspaceId = access.workspaceId;
+  if (!access.client || !workspaceId || access.creatorId !== creatorId) {
+    return { data: [], access: access.status, error: access.status.reason ?? "The creator profile does not belong to the active workspace." };
+  }
 
   const [membersResult, interactionsResult, questionsResult, sourcesResult] = await Promise.all([
     access.client
       .from("audience_members")
       .select("*")
       .eq("creator_id", creatorId)
+      .eq("workspace_id", workspaceId)
       .order("last_seen_at", { ascending: false }),
     access.client
       .from("interactions")
       .select("*")
       .eq("creator_id", creatorId)
+      .eq("workspace_id", workspaceId)
       .order("published_at", { ascending: true }),
     access.client
       .from("unresolved_questions")
       .select("audience_member_id, status")
       .eq("creator_id", creatorId)
+      .eq("workspace_id", workspaceId)
       .eq("status", "open"),
     access.client
       .from("sources")
       .select("*")
-      .eq("creator_id", creatorId),
+      .eq("creator_id", creatorId)
+      .eq("workspace_id", workspaceId),
   ]);
 
   const queryError = [membersResult, interactionsResult, questionsResult, sourcesResult].find(

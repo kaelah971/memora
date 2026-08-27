@@ -44,6 +44,14 @@ export default async function MemoryPage() {
         <DataSetupState reason={historyResult.error ?? "Audience history could not be loaded."} />
       ) : historyResult?.error ? (
         <DataSetupState reason={historyResult.error} />
+      ) : historyResult?.data.length === 0 ? (
+        <ProductEmptyState
+          eyebrow="NO AUDIENCE MEMORY"
+          title="No audience memory yet."
+          description="Connect YouTube or Discord to import source-backed moments."
+          href="/app/import"
+          actionLabel="Connect a source"
+        />
       ) : (
         <section className="audience-history" aria-labelledby="audience-history-title">
           <div className="audience-history__heading">

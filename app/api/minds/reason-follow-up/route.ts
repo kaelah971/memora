@@ -15,6 +15,7 @@ import {
 } from "@/lib/minds/follow-up-reasoning";
 import { sendAndPollForMindReply } from "@/lib/minds/reply";
 import { normalizeCreatorVoice } from "@/types/data";
+import { getCurrentWorkspaceContext, getWorkspaceMindAlias } from "@/lib/workspaces/access";
 
 interface ReasonFollowUpBody {
   opportunityId?: unknown;
@@ -59,6 +60,10 @@ export async function POST(request: Request) {
     }
 
     const creator = await getDevelopmentCreator();
+    const workspaceContext = await getCurrentWorkspaceContext();
+    if (!workspaceContext.data) {
+      throw new MindsIntegrationError("STORAGE", "Memora could not resolve the active workspace.", { status: 500 });
+    }
     const queueResult = await listFollowUpOpportunities(creator.id);
     if (queueResult.error || !queueResult.access.available) {
       throw new MindsIntegrationError("STORAGE", "Memora could not load the source-backed opportunity.", { status: 500 });
@@ -71,9 +76,10 @@ export async function POST(request: Request) {
     const config = readMindsConfig();
     builderApiKey = config.builderApiKey;
     const client = createAuthenticatedMindsClient(config);
-    const conversationId = await verifyConfiguredMind(client, config.mindId, config.alias);
+    const conversationAlias = getWorkspaceMindAlias(workspaceContext.data.workspace);
+    const conversationId = await verifyConfiguredMind(client, config.mindId, conversationAlias);
     const prompt = buildFollowUpReasoningPrompt(opportunity, normalizeCreatorVoice(creator.voice_preference));
-    const capture = await sendAndPollForMindReply(client, config.alias, prompt);
+    const capture = await sendAndPollForMindReply(client, conversationAlias, prompt);
     if (!capture.response) {
       throw new MindsIntegrationError("TIMEOUT", "Memora Mind did not return reasoning before the safe timeout.", { status: 504 });
     }

@@ -24,6 +24,7 @@ export interface DiscordOnboardingPromptInput {
   triggerType: OnboardingTriggerType;
   priorMemory: string;
   sourceMessageText: string | null;
+  conversationAlias?: string;
 }
 
 export interface ClearGuideRequestMatch {

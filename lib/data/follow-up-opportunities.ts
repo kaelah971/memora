@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getDevelopmentDataAccess } from "@/lib/data/access";
+import { getCurrentDataAccess } from "@/lib/data/access";
 import { normalizeCreatorVoice } from "@/types/data";
 import type { DataResult } from "@/lib/data/types";
 import {
@@ -27,24 +27,27 @@ export type {
 export async function listFollowUpOpportunities(
   creatorId: string,
 ): Promise<DataResult<FollowUpQueue>> {
-  const access = getDevelopmentDataAccess();
+  const access = await getCurrentDataAccess();
   const emptyQueue: FollowUpQueue = {
     opportunities: [],
     dataOrigin: "none",
     importedInteractionCount: 0,
     importedEventCount: 0,
   };
-  if (!access.client) return { data: emptyQueue, access: access.status, error: access.status.reason };
+  const workspaceId = access.workspaceId;
+  if (!access.client || !workspaceId || access.creatorId !== creatorId) {
+    return { data: emptyQueue, access: access.status, error: access.status.reason ?? "The creator profile does not belong to the active workspace." };
+  }
 
   const [creatorResult, membersResult, interactionsResult, sourcesResult, questionsResult, eventsResult, actionsResult, mindReasoningResult] = await Promise.all([
-    access.client.from("creators").select("voice_preference").eq("id", creatorId).maybeSingle(),
-    access.client.from("audience_members").select("*").eq("creator_id", creatorId),
-    access.client.from("interactions").select("*").eq("creator_id", creatorId).order("published_at", { ascending: false }),
-    access.client.from("sources").select("*").eq("creator_id", creatorId),
-    access.client.from("unresolved_questions").select("*").eq("creator_id", creatorId),
-    access.client.from("creator_events").select("*").eq("creator_id", creatorId).order("occurred_at", { ascending: false }),
-    access.client.from("creator_actions").select("*").eq("creator_id", creatorId).order("created_at", { ascending: false }),
-    access.client.from("follow_up_mind_reasoning").select("*").eq("creator_id", creatorId).order("updated_at", { ascending: false }),
+    access.client.from("creators").select("voice_preference").eq("id", creatorId).eq("workspace_id", workspaceId).maybeSingle(),
+    access.client.from("audience_members").select("*").eq("creator_id", creatorId).eq("workspace_id", workspaceId),
+    access.client.from("interactions").select("*").eq("creator_id", creatorId).eq("workspace_id", workspaceId).order("published_at", { ascending: false }),
+    access.client.from("sources").select("*").eq("creator_id", creatorId).eq("workspace_id", workspaceId),
+    access.client.from("unresolved_questions").select("*").eq("creator_id", creatorId).eq("workspace_id", workspaceId),
+    access.client.from("creator_events").select("*").eq("creator_id", creatorId).eq("workspace_id", workspaceId).order("occurred_at", { ascending: false }),
+    access.client.from("creator_actions").select("*").eq("creator_id", creatorId).eq("workspace_id", workspaceId).order("created_at", { ascending: false }),
+    access.client.from("follow_up_mind_reasoning").select("*").eq("creator_id", creatorId).eq("workspace_id", workspaceId).order("updated_at", { ascending: false }),
   ]);
   const queryError = [creatorResult, membersResult, interactionsResult, sourcesResult, questionsResult, eventsResult, actionsResult, mindReasoningResult].find(
     (result) => result.error,

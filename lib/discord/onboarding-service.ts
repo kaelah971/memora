@@ -26,6 +26,7 @@ import { generateDiscordOnboardingMessage } from "@/lib/minds/onboarding";
 import { toMindsErrorInfo } from "@/lib/minds/errors";
 import { BUILDER_API_KEY_ENV } from "@/lib/minds/config";
 import { getCreatorWorkspace } from "@/lib/data/creators";
+import { getCreatorMindAlias } from "@/lib/workspaces/aliases";
 import { normalizeCreatorVoice, type CreatorVoice } from "@/types/data";
 
 export interface DiscordOnboardingProcessResult {
@@ -47,6 +48,7 @@ export interface DiscordOnboardingContext {
   creatorVoice: CreatorVoice;
   settings: DiscordOnboardingSettingsInput;
   channels: OnboardingChannelContext[];
+  mindAlias: string;
 }
 
 export interface DiscordOnboardingMessageResult {
@@ -137,6 +139,7 @@ export async function loadDiscordOnboardingContext(creatorId: string): Promise<{
       creatorVoice: normalizeCreatorVoice(creator.data.voice_preference),
       settings,
       channels: labeledChannels(settings, selectedChannels),
+      mindAlias: getCreatorMindAlias(creator.data),
     },
     error: null,
   };
@@ -213,6 +216,7 @@ async function runForMember(
       triggerType: input.triggerType,
       priorMemory: priorMemoryText(memory.data),
       sourceMessageText: input.sourceMessageText,
+      conversationAlias: context.mindAlias,
     });
   } catch (error) {
     const reason = safeMessageError(error);

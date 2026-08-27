@@ -9,6 +9,7 @@ export { importYouTubeVideoComments } from "@/lib/youtube/import";
 export { insertYouTubeReply, validateYouTubeReplyText } from "@/lib/youtube/replies";
 export {
   getDevelopmentCreator,
+  getCurrentYouTubeClient,
   getYouTubeConnection,
   getPublicYouTubeConnection,
   upsertYouTubeConnection,

@@ -8,6 +8,7 @@ import type { DiscordReadableChannel } from "@/lib/discord/channels";
 import type { OnboardingReceiptStatus, OnboardingTriggerType } from "@/lib/discord/onboarding-types";
 import { onboardingSettingsInput as mapOnboardingSettings, type DiscordOnboardingSettingsInput } from "@/lib/discord/onboarding-settings";
 import { readDiscordOnboardingSettings } from "@/lib/discord/onboarding-settings-storage";
+import { DEMO_WORKSPACE_ID } from "@/lib/workspaces/constants";
 
 export type { DiscordOnboardingSettingsInput } from "@/lib/discord/onboarding-settings";
 
@@ -62,6 +63,7 @@ export async function getDevelopmentCreator(storage: DiscordListenerStorage): Pr
     .from("creators")
     .select("*")
     .eq("slug", "memora-demo")
+    .eq("workspace_id", DEMO_WORKSPACE_ID)
     .maybeSingle();
   throwStorageError(error, "The creator workspace could not be loaded.");
   if (!data) throw new Error("The creator workspace is not available.");
@@ -76,6 +78,7 @@ export async function getDiscordConnection(
     .from("discord_connections")
     .select("*")
     .eq("creator_id", creatorId)
+    .eq("workspace_id", DEMO_WORKSPACE_ID)
     .maybeSingle();
   throwStorageError(error, "The Discord connection could not be loaded.");
   return data;
@@ -109,7 +112,7 @@ export async function getDiscordOnboardingSettings(
   creatorId: string,
   connectionId: string,
 ): Promise<DiscordOnboardingSettings | null> {
-  const result = await readDiscordOnboardingSettings(storage.client, creatorId, connectionId);
+  const result = await readDiscordOnboardingSettings(storage.client, creatorId, connectionId, DEMO_WORKSPACE_ID);
   if (result.error) throw new Error(result.error);
   return result.data;
 }
@@ -123,6 +126,7 @@ export async function getDiscordMemberMemory(
     .from("audience_members")
     .select("*")
     .eq("creator_id", creatorId)
+    .eq("workspace_id", DEMO_WORKSPACE_ID)
     .eq("platform", "discord")
     .eq("platform_user_id", discordUserId)
     .maybeSingle();
@@ -134,6 +138,7 @@ export async function getDiscordMemberMemory(
         .from("interactions")
         .select("*")
         .eq("creator_id", creatorId)
+        .eq("workspace_id", DEMO_WORKSPACE_ID)
         .eq("audience_member_id", member.id)
         .order("published_at", { ascending: false })
         .limit(12)
@@ -142,6 +147,7 @@ export async function getDiscordMemberMemory(
     .from("discord_onboarding_receipts")
     .select("*")
     .eq("creator_id", creatorId)
+    .eq("workspace_id", DEMO_WORKSPACE_ID)
     .eq("discord_user_id", discordUserId)
     .order("created_at", { ascending: false })
     .limit(12);
@@ -172,6 +178,7 @@ export async function findRecentDiscordOnboardingReceipt(
     .select("*")
     .eq("creator_id", input.creatorId)
     .eq("discord_connection_id", input.connectionId)
+    .eq("workspace_id", DEMO_WORKSPACE_ID)
     .eq("source_message_id", input.sourceMessageId)
     .order("created_at", { ascending: false })
     .limit(1)
@@ -186,7 +193,7 @@ export async function createDiscordOnboardingReceipt(
 ): Promise<DiscordOnboardingReceipt> {
   const { data, error } = await storage.client
     .from("discord_onboarding_receipts")
-    .insert(receipt)
+    .insert({ ...receipt, workspace_id: DEMO_WORKSPACE_ID })
     .select("*")
     .single();
   throwStorageError(error, "The Discord onboarding receipt could not be saved.");
@@ -203,6 +210,7 @@ export async function updateDiscordOnboardingReceipt(
     .from("discord_onboarding_receipts")
     .update(update)
     .eq("id", receiptId)
+    .eq("workspace_id", DEMO_WORKSPACE_ID)
     .select("*")
     .single();
   throwStorageError(error, "The Discord onboarding receipt could not be updated.");
@@ -235,6 +243,7 @@ export async function recordOnboardingMemory(
   const source: TablesInsert<"sources"> = {
     id: sourceId,
     creator_id: input.creatorId,
+    workspace_id: DEMO_WORKSPACE_ID,
     platform: "discord",
     source_type: "discord_channel",
     external_id: input.channelId,
@@ -258,11 +267,14 @@ export async function recordOnboardingMemory(
     .from("audience_members")
     .select("first_seen_at, last_seen_at")
     .eq("id", memberId)
+    .eq("creator_id", input.creatorId)
+    .eq("workspace_id", DEMO_WORKSPACE_ID)
     .maybeSingle();
   throwStorageError(existingMember.error, "The Discord member could not be loaded.");
   const member: TablesInsert<"audience_members"> = {
     id: memberId,
     creator_id: input.creatorId,
+    workspace_id: DEMO_WORKSPACE_ID,
     platform: "discord",
     platform_user_id: input.discordUserId,
     display_name: input.discordUsername,
@@ -277,6 +289,7 @@ export async function recordOnboardingMemory(
   const interaction: TablesInsert<"interactions"> = {
     id: interactionId,
     creator_id: input.creatorId,
+    workspace_id: DEMO_WORKSPACE_ID,
     audience_member_id: memberId,
     source_id: sourceId,
     platform: "discord",
@@ -310,14 +323,15 @@ export async function updateOnboardingMemoryStatus(
   status: OnboardingReceiptStatus,
   sentMessageId: string | null,
 ): Promise<void> {
-  const existing = await storage.client.from("interactions").select("raw_metadata").eq("id", interactionId).maybeSingle();
+  const existing = await storage.client.from("interactions").select("raw_metadata").eq("id", interactionId).eq("workspace_id", DEMO_WORKSPACE_ID).maybeSingle();
   throwStorageError(existing.error, "The onboarding interaction could not be loaded.");
   const rawMetadata = existing.data?.raw_metadata;
   const metadata: Record<string, Json | undefined> = rawMetadata && isRecord(rawMetadata) ? rawMetadata : {};
   const { error } = await storage.client
     .from("interactions")
     .update({ raw_metadata: { ...metadata, onboarding_status: status, sent_message_id: sentMessageId } })
-    .eq("id", interactionId);
+    .eq("id", interactionId)
+    .eq("workspace_id", DEMO_WORKSPACE_ID);
   throwStorageError(error, "The onboarding interaction could not be updated.");
 }
 
@@ -369,6 +383,7 @@ export async function persistDiscordMessage(
   const source: TablesInsert<"sources"> = {
     id: sourceId,
     creator_id: creatorId,
+    workspace_id: DEMO_WORKSPACE_ID,
     platform: "discord",
     source_type: "discord_channel",
     external_id: channel.id,
@@ -389,6 +404,7 @@ export async function persistDiscordMessage(
     const event: TablesInsert<"creator_events"> = {
       id: discordCreatorEventId(creatorId, message.id),
       creator_id: creatorId,
+      workspace_id: DEMO_WORKSPACE_ID,
       event_type: "product_update",
       source_id: sourceId,
       external_id: message.id,
@@ -414,12 +430,15 @@ export async function persistDiscordMessage(
     .from("audience_members")
     .select("first_seen_at, last_seen_at")
     .eq("id", memberId)
+    .eq("creator_id", creatorId)
+    .eq("workspace_id", DEMO_WORKSPACE_ID)
     .maybeSingle();
   throwStorageError(existingMember.error, "Discord community members could not be checked.");
   const occurredAtText = occurredAt.toISOString();
   const memberResult = await storage.client.from("audience_members").upsert({
     id: memberId,
     creator_id: creatorId,
+    workspace_id: DEMO_WORKSPACE_ID,
     platform: "discord",
     platform_user_id: message.author.id,
     display_name: displayName(message),
@@ -432,6 +451,7 @@ export async function persistDiscordMessage(
   const interaction: TablesInsert<"interactions"> = {
     id: discordInteractionId(creatorId, message.id),
     creator_id: creatorId,
+    workspace_id: DEMO_WORKSPACE_ID,
     audience_member_id: memberId,
     source_id: sourceId,
     platform: "discord",

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { getDevelopmentCreator } from "@/lib/youtube/server";
-import { getTrustedYouTubeClient, getYouTubeConnection } from "@/lib/youtube/storage";
+import { getCurrentYouTubeAccess, getYouTubeConnection } from "@/lib/youtube/storage";
 import { insertYouTubeReply, validateYouTubeReplyText } from "@/lib/youtube/replies";
 import { YouTubeIntegrationError, toYouTubeIntegrationError } from "@/lib/youtube/errors";
 import { recordCreatorAction, updateCreatorAction } from "@/lib/data/creator-actions";
@@ -20,6 +20,7 @@ function safeIdentifier(value: unknown, maxLength: number): string | null {
 
 export async function POST(request: Request) {
   let reservationId: string | null = null;
+  let currentCreatorId: string | null = null;
   let externalPostSucceeded = false;
 
   try {
@@ -30,29 +31,34 @@ export async function POST(request: Request) {
     const replyText = validateYouTubeReplyText(body.replyText);
 
     const creator = await getDevelopmentCreator();
+    currentCreatorId = creator.id;
     const queueResult = await listFollowUpOpportunities(creator.id);
     if (queueResult.error) throw new YouTubeIntegrationError("storage_error", 500, queueResult.error);
     const opportunity = findReplyOpportunity(queueResult.data.opportunities, opportunityId, interactionId);
     if (!opportunity) throw new YouTubeIntegrationError("invalid_request", 400);
 
-    const client = getTrustedYouTubeClient();
+    const access = await getCurrentYouTubeAccess(creator.id);
+    const client = access.client;
     const [interactionResult, sourceResult, actionsResult] = await Promise.all([
       client
         .from("interactions")
         .select("id, creator_id, audience_member_id, source_id, platform, external_id, parent_interaction_id")
         .eq("id", opportunity.interactionId)
         .eq("creator_id", creator.id)
+        .eq("workspace_id", access.workspaceId)
         .maybeSingle(),
       client
         .from("sources")
         .select("id, external_id, platform, source_type")
         .eq("id", opportunity.sourceId)
         .eq("creator_id", creator.id)
+        .eq("workspace_id", access.workspaceId)
         .maybeSingle(),
       client
         .from("creator_actions")
         .select("*")
         .eq("creator_id", creator.id)
+        .eq("workspace_id", access.workspaceId)
         .eq("interaction_id", opportunity.interactionId)
         .eq("creator_event_id", opportunity.creatorEventId)
         .order("created_at", { ascending: false }),
@@ -125,7 +131,7 @@ export async function POST(request: Request) {
       completed_at: postedAt,
       text: posted.replyText,
       metadata: proofMetadata,
-    });
+    }, creator.id);
     if (savedProof.error || !savedProof.data) {
       throw new YouTubeIntegrationError("reply_proof_storage_error", 500);
     }
@@ -145,7 +151,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     const safeError = toYouTubeIntegrationError(error, "invalid_request");
-    if (reservationId && !externalPostSucceeded) {
+    if (reservationId && currentCreatorId && !externalPostSucceeded) {
       await updateCreatorAction(reservationId, {
         status: "failed",
         completed_at: new Date().toISOString(),
@@ -153,7 +159,7 @@ export async function POST(request: Request) {
           posting_status: "failed",
           error_code: safeError.code,
         },
-      });
+      }, currentCreatorId);
     }
     return NextResponse.json(
       { error: safeError.message, code: safeError.code },

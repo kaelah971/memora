@@ -389,6 +389,206 @@ select {
   font-size: 12px;
 }
 
+.window-navigation__workspace-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.workspace-switcher {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 2px;
+}
+
+.workspace-switcher a,
+.workspace-switcher button {
+  display: inline-flex;
+  min-height: 40px;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 9999px;
+  color: var(--ink);
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--font-ui-stack);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.015em;
+  line-height: 16px;
+  text-align: center;
+}
+
+.workspace-switcher a:hover,
+.workspace-switcher button:hover {
+  background: var(--light-blue);
+}
+
+.workspace-switcher__identity {
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-page {
+  width: min(680px, calc(100% - 32px));
+  margin: 64px auto 96px;
+}
+
+.auth-form {
+  display: grid;
+  gap: 32px;
+  min-width: 0;
+  padding: 24px;
+}
+
+.auth-form__heading {
+  max-width: 560px;
+}
+
+.auth-form__heading h1 {
+  margin-top: 12px;
+  font-size: clamp(30px, 5vw, 48px);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.04;
+}
+
+.auth-form__heading p {
+  margin-top: 14px;
+  color: var(--muted-ink);
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.auth-form form {
+  display: grid;
+  gap: 16px;
+  max-width: 480px;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.auth-form input {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 14px;
+  border: 1.5px solid var(--ink);
+  border-radius: 10px;
+  color: var(--ink);
+  background: var(--notebook-cream);
+  font: inherit;
+}
+
+.auth-form input:focus-visible,
+.auth-form button:focus-visible,
+.auth-form a:focus-visible {
+  outline: 2px solid var(--sticker-blue);
+  outline-offset: 3px;
+}
+
+.auth-form__status {
+  color: var(--muted-ink);
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.auth-form__switch {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  color: var(--muted-ink);
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.auth-form__switch button {
+  padding: 4px 0;
+  border: 0;
+  color: var(--ink);
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+.workspace-setup-checklist {
+  display: grid;
+  gap: 28px;
+  padding: 28px;
+  border: 1.5px solid var(--ink);
+  border-radius: 10px;
+  background: var(--pale-yellow);
+}
+
+.workspace-setup-checklist h2 {
+  max-width: 620px;
+  margin-top: 10px;
+  font-size: clamp(28px, 4vw, 42px);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.04;
+}
+
+.workspace-setup-checklist > div > p {
+  max-width: 680px;
+  margin-top: 14px;
+  color: var(--muted-ink);
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.workspace-setup-checklist ol {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workspace-setup-checklist li {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  padding: 18px;
+  border: 1.5px solid var(--ink);
+  border-radius: 10px;
+  background: var(--polaroid-white);
+}
+
+.workspace-setup-checklist h3 {
+  font-size: 20px;
+  font-weight: 800;
+  line-height: 26px;
+}
+
+.workspace-setup-checklist li p {
+  margin-top: 8px;
+  color: var(--muted-ink);
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.workspace-setup-checklist li .secondary-link {
+  justify-content: flex-start;
+  margin-top: 12px;
+}
+
 .hero-grid {
   display: grid;
   grid-template-columns: minmax(0, 0.94fr) minmax(0, 1.06fr);
@@ -1274,7 +1474,21 @@ select {
   gap: 16px;
 }
 
+.app-shell__demo-note {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+  color: var(--muted-ink);
+  font-size: 11px;
+  line-height: 15px;
+}
+
+.app-shell__demo-note > span:last-child {
+  max-width: 320px;
+}
+
 .app-shell__header-meta .primary-button {
+  flex: 0 0 auto;
   min-height: 40px;
   padding: 10px 16px;
   font-size: 12px;
@@ -3602,6 +3816,30 @@ select {
   .window-navigation__action {
     grid-column: 1 / -1;
     justify-self: start;
+  }
+
+  .window-navigation__workspace-actions,
+  .workspace-switcher {
+    justify-content: flex-start;
+  }
+
+  .auth-page {
+    width: min(100% - 24px, 680px);
+    margin-top: 24px;
+    margin-bottom: calc(64px + env(safe-area-inset-bottom));
+  }
+
+  .auth-form {
+    gap: 24px;
+    padding: 16px;
+  }
+
+  .workspace-setup-checklist {
+    padding: 20px;
+  }
+
+  .workspace-setup-checklist ol {
+    grid-template-columns: 1fr;
   }
 
   .hero-grid,

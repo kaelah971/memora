@@ -6,13 +6,15 @@ export async function readDiscordOnboardingSettings(
   client: DataClient,
   creatorId: string,
   connectionId: string,
+  workspaceId?: string,
 ): Promise<{ data: DiscordOnboardingSettings | null; error: string | null }> {
-  const { data, error } = await client
+  let query = client
     .from("discord_onboarding_settings")
     .select("*")
     .eq("creator_id", creatorId)
-    .eq("discord_connection_id", connectionId)
-    .maybeSingle();
+    .eq("discord_connection_id", connectionId);
+  if (workspaceId) query = query.eq("workspace_id", workspaceId);
+  const { data, error } = await query.maybeSingle();
   return { data, error: error?.message ?? null };
 }
 

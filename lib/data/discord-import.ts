@@ -1,6 +1,6 @@
 import "server-only";
 
-import { getDevelopmentDataAccess } from "@/lib/data/access";
+import { getCurrentDataAccess } from "@/lib/data/access";
 import type { DataResult } from "@/lib/data/types";
 
 export interface DiscordImportStatus {
@@ -12,7 +12,7 @@ export interface DiscordImportStatus {
 }
 
 export async function getDiscordImportStatus(creatorId: string): Promise<DataResult<DiscordImportStatus>> {
-  const access = getDevelopmentDataAccess();
+  const access = await getCurrentDataAccess();
   const empty: DiscordImportStatus = {
     channelCount: 0,
     messageCount: 0,
@@ -20,13 +20,16 @@ export async function getDiscordImportStatus(creatorId: string): Promise<DataRes
     creatorEventCount: 0,
     lastImportedAt: null,
   };
-  if (!access.client) return { data: empty, access: access.status, error: access.status.reason };
+  const workspaceId = access.workspaceId;
+  if (!access.client || !workspaceId || access.creatorId !== creatorId) {
+    return { data: empty, access: access.status, error: access.status.reason ?? "The creator profile does not belong to the active workspace." };
+  }
 
   const [sourcesResult, interactionsResult, membersResult, eventsResult] = await Promise.all([
-    access.client.from("sources").select("id, imported_at").eq("creator_id", creatorId).eq("platform", "discord"),
-    access.client.from("interactions").select("id", { count: "exact", head: true }).eq("creator_id", creatorId).eq("platform", "discord"),
-    access.client.from("audience_members").select("id", { count: "exact", head: true }).eq("creator_id", creatorId).eq("platform", "discord"),
-    access.client.from("creator_events").select("id, source_id").eq("creator_id", creatorId).eq("event_type", "product_update"),
+    access.client.from("sources").select("id, imported_at").eq("creator_id", creatorId).eq("workspace_id", workspaceId).eq("platform", "discord"),
+    access.client.from("interactions").select("id", { count: "exact", head: true }).eq("creator_id", creatorId).eq("workspace_id", workspaceId).eq("platform", "discord"),
+    access.client.from("audience_members").select("id", { count: "exact", head: true }).eq("creator_id", creatorId).eq("workspace_id", workspaceId).eq("platform", "discord"),
+    access.client.from("creator_events").select("id, source_id").eq("creator_id", creatorId).eq("workspace_id", workspaceId).eq("event_type", "product_update"),
   ]);
   const queryError = [sourcesResult, interactionsResult, membersResult, eventsResult].find((result) => result.error)?.error;
   if (queryError) return { data: empty, access: access.status, error: queryError.message };

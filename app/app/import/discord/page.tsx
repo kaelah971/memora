@@ -9,7 +9,7 @@ import type { DiscordReadableChannel } from "@/lib/discord/channels";
 import { getDiscordImportStatus } from "@/lib/data/discord-import";
 import { getDiscordOnboardingSettings, listDiscordOnboardingReceipts } from "@/lib/data/discord-onboarding";
 import { discordOnboardingSettingsView } from "@/lib/discord/onboarding-settings";
-import { getDevelopmentCreator } from "@/lib/youtube/server";
+import { getCurrentWorkspaceContext } from "@/lib/workspaces/access";
 
 export const dynamic = "force-dynamic";
 
@@ -22,13 +22,11 @@ function formatDate(value: string | null): string {
 export default async function DiscordImportPage() {
   const config = getDiscordConfigStatus();
   const oauthConfig = getDiscordOAuthConfigStatus();
+  const workspaceResult = await getCurrentWorkspaceContext();
+  const demoMode = workspaceResult.data?.mode === "demo";
   let creator = null;
-  let creatorError: string | null = null;
-  try {
-    creator = await getDevelopmentCreator();
-  } catch {
-    creatorError = "The local creator workspace is not available for Discord import.";
-  }
+  const creatorError = workspaceResult.error;
+  if (workspaceResult.data) creator = workspaceResult.data.creator;
   const statusResult = creator ? await getDiscordImportStatus(creator.id) : null;
   const connectionResult = creator ? await getDiscordConnection(creator.id) : null;
   const channelsResult = connectionResult?.data ? await listDiscordConnectionChannels(creator!.id) : null;
@@ -87,12 +85,12 @@ export default async function DiscordImportPage() {
           <section className="discord-connection" aria-labelledby="discord-connection-title">
             <div className="discord-connection__heading">
               <div>
-                <span className="section-label">DISCORD / {connection ? "CONNECTED" : config.ready ? "DEVELOPER DEMO" : "NOT CONNECTED"}</span>
-                <h2 id="discord-connection-title">{connection?.guildName ?? (config.ready ? "Memora Community Demo" : "Connect your server.")}</h2>
+                <span className="section-label">DISCORD / {connection ? "CONNECTED" : demoMode && config.ready ? "PUBLIC DEMO" : "NOT CONNECTED"}</span>
+                <h2 id="discord-connection-title">{connection?.guildName ?? (demoMode && config.ready ? "Memora Community Demo" : "Connect your server.")}</h2>
                 <p>Discord import is read-only. Optional onboarding assist is separate and limited to configured rules.</p>
               </div>
-              <span className={`state-sticker ${connection || config.ready ? "state-sticker--remembered" : "state-sticker--open"}`}>
-                {connection ? "USER CONNECTED" : config.ready ? "READY TO READ" : "CONNECT DISCORD"}
+                <span className={`state-sticker ${connection || demoMode && config.ready ? "state-sticker--remembered" : "state-sticker--open"}`}>
+                 {connection ? "USER CONNECTED" : demoMode && config.ready ? "READY TO READ" : "CONNECT DISCORD"}
               </span>
             </div>
             <dl className="discord-connection__facts">
@@ -108,7 +106,8 @@ export default async function DiscordImportPage() {
              connection={connection}
             initialChannels={(channelsResult?.data ?? []) as DiscordReadableChannel[]}
             initialChannelError={channelsResult?.error ?? null}
-             initialLastImportedAt={connection?.lastImportAt ?? statusResult?.data.lastImportedAt ?? null}
+              initialLastImportedAt={connection?.lastImportAt ?? statusResult?.data.lastImportedAt ?? null}
+              demoMode={demoMode}
            />
           <div className="discord-live-listener-note" role="note">
             <span className="section-label">LIVE DISCORD LISTENER</span>
