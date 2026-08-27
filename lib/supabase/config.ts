@@ -28,6 +28,11 @@ export interface SupabaseServiceRoleConfig extends SupabasePublicConfig {
   serviceRoleKey: string;
 }
 
+export interface SupabaseWorkerConfig {
+  url: string;
+  serviceRoleKey: string;
+}
+
 export class SupabaseConfigError extends Error {
   readonly missing: string[];
 
@@ -130,6 +135,46 @@ export function createServiceRoleSupabaseClient(
   environment: Environment = process.env,
 ) {
   const config = readSupabaseServiceRoleConfig(environment);
+
+  return createClient<Database>(config.url, config.serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+      persistSession: false,
+    },
+  });
+}
+
+export function readSupabaseWorkerConfig(
+  environment: Environment = process.env,
+): SupabaseWorkerConfig {
+  const url = readValue(environment, SUPABASE_URL_ENV);
+  const serviceRoleKey = readValue(environment, SUPABASE_SERVICE_ROLE_KEY_ENV);
+  const missing = [
+    !url ? SUPABASE_URL_ENV : null,
+    !serviceRoleKey ? SUPABASE_SERVICE_ROLE_KEY_ENV : null,
+  ].filter((key): key is string => Boolean(key));
+
+  if (missing.length > 0) {
+    throw new SupabaseConfigError(
+      `Supabase worker configuration is incomplete. Missing: ${missing.join(", ")}.`,
+      missing,
+    );
+  }
+
+  try {
+    new URL(url as string);
+  } catch {
+    throw new SupabaseConfigError(`${SUPABASE_URL_ENV} must be a valid URL.`, [SUPABASE_URL_ENV]);
+  }
+
+  return { url: url as string, serviceRoleKey: serviceRoleKey as string };
+}
+
+export function createWorkerSupabaseClient(
+  environment: Environment = process.env,
+) {
+  const config = readSupabaseWorkerConfig(environment);
 
   return createClient<Database>(config.url, config.serviceRoleKey, {
     auth: {

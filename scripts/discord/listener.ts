@@ -11,9 +11,7 @@ import {
 
 import {
   createDiscordListenerStorage,
-  getDevelopmentCreator,
-  getDiscordConnection,
-  getDiscordOnboardingSettings,
+  listDiscordListenerWorkspaces,
   onboardingSettingsInput,
   persistDiscordMessage,
   type DiscordListenerStorage,
@@ -21,6 +19,7 @@ import {
 import type { DiscordMessage } from "../../lib/discord/client";
 import { readDiscordBotToken, type DiscordConfig } from "../../lib/discord/config";
 import { isNetworkFailure } from "../../lib/discord/errors";
+import { matchClearGuideRequest } from "../../lib/discord/onboarding";
 import type { OnboardingSendMode } from "../../lib/discord/onboarding-types";
 import { processDiscordListenerOnboardingMessage } from "../../lib/discord/listener-onboarding";
 import {
@@ -30,6 +29,7 @@ import {
 } from "../../lib/discord/live-listener";
 
 interface ListenerRuntime {
+  workspaceId: string;
   creatorId: string;
   connectionId: string;
   botToken: string;
@@ -72,29 +72,27 @@ function reportGatewayError(prefix: string, error: unknown): void {
   console.error(`${prefix}: ${gatewayFailureCategory(error)}`);
 }
 
-async function loadRuntime(): Promise<ListenerRuntime> {
-  const storage = createDiscordListenerStorage();
-  const creator = await getDevelopmentCreator(storage);
-  const connection = await getDiscordConnection(storage, creator.id);
-  if (!connection) throw new Error("Connect Discord before starting the live listener.");
-  const selectedChannelIds = [...new Set(connection.selected_channel_ids)];
-  if (selectedChannelIds.length === 0) throw new Error("Select and save at least one Discord channel before starting the live listener.");
-  const onboardingRow = await getDiscordOnboardingSettings(storage, creator.id, connection.id);
-  const onboardingSettings = onboardingSettingsInput(onboardingRow);
-  console.log(`[discord listener] settings row_id=${onboardingRow?.id ?? "none"} creator_id=${creator.id} connection_id=${connection.id} guild_id=${connection.guild_id} enabled=${onboardingSettings.enabled} send_mode=${onboardingSettings.sendMode} question_channel_id=${onboardingSettings.questionChannelId ?? "null"}`);
-  return {
-    creatorId: creator.id,
-    connectionId: connection.id,
-    botToken: readDiscordBotToken(),
-    guildId: connection.guild_id,
-    guildName: connection.guild_name,
-    selectedChannelIds,
-    storage,
-    onboardingSettingsRowId: onboardingRow?.id ?? null,
-    onboardingEnabled: onboardingSettings.enabled,
-    onboardingSendMode: onboardingSettings.sendMode,
-    onboardingQuestionChannelId: onboardingSettings.questionChannelId,
-  };
+async function loadRuntimes(storage: DiscordListenerStorage, botToken: string): Promise<ListenerRuntime[]> {
+  const workspaces = await listDiscordListenerWorkspaces(storage);
+  return workspaces.map(({ workspaceId, creator, connection, onboardingSettings: onboardingRow }) => {
+    const selectedChannelIds = [...new Set(connection.selected_channel_ids)];
+    const onboardingSettings = onboardingSettingsInput(onboardingRow, selectedChannelIds);
+    console.log(`[discord listener] workspace_id=${workspaceId} creator_id=${creator.id} connection_id=${connection.id} guild_id=${connection.guild_id} enabled=${onboardingSettings.enabled} send_mode=${onboardingSettings.sendMode} selected_channel_count=${selectedChannelIds.length}`);
+    return {
+      workspaceId,
+      creatorId: creator.id,
+      connectionId: connection.id,
+      botToken,
+      guildId: connection.guild_id,
+      guildName: connection.guild_name,
+      selectedChannelIds,
+      storage,
+      onboardingSettingsRowId: onboardingRow?.id ?? null,
+      onboardingEnabled: onboardingSettings.enabled,
+      onboardingSendMode: onboardingSettings.sendMode,
+      onboardingQuestionChannelId: onboardingSettings.questionChannelId,
+    };
+  });
 }
 
 async function verifyPermissions(guild: Guild, channelIds: readonly string[]): Promise<void> {
@@ -150,71 +148,125 @@ function toDiscordMessage(message: LiveDiscordMessage): DiscordMessage {
   };
 }
 
-async function logReady(client: Client, runtime: ListenerRuntime): Promise<void> {
-  const guild = await client.guilds.fetch(runtime.guildId);
-  if (!guild || guild.id !== runtime.guildId) throw new Error("The saved Discord guild could not be verified for the live listener.");
-  await verifyPermissions(guild, runtime.selectedChannelIds);
-  console.log("Memora Discord listener ready");
-  console.log(`guild: ${guild.name} (${guild.id})`);
-  console.log(`watched channel ids: ${runtime.selectedChannelIds.join(", ")}`);
+async function verifyRuntime(client: Client, runtime: ListenerRuntime): Promise<boolean> {
+  try {
+    const guild = await client.guilds.fetch(runtime.guildId);
+    if (!guild || guild.id !== runtime.guildId) throw new Error("The saved Discord guild could not be verified for the live listener.");
+    if (runtime.selectedChannelIds.length > 0) await verifyPermissions(guild, runtime.selectedChannelIds);
+    console.log(`[discord listener] workspace_id=${runtime.workspaceId} guild_id=${guild.id} guild_name=${guild.name} selected_channel_count=${runtime.selectedChannelIds.length} permissions=verified`);
+    return true;
+  } catch (error) {
+    reportGatewayError(`[discord listener] workspace_id=${runtime.workspaceId} guild_id=${runtime.guildId} verification failed`, error);
+    return false;
+  }
+}
+
+async function verifyRuntimes(client: Client, runtimes: ListenerRuntime[]): Promise<ListenerRuntime[]> {
+  const verified: ListenerRuntime[] = [];
+  for (const runtime of runtimes) {
+    if (await verifyRuntime(client, runtime)) verified.push(runtime);
+  }
+  return verified;
+}
+
+function sendDecision(outcome: string): "sent" | "failed" | "skipped" {
+  if (outcome === "sent") return "sent";
+  if (outcome === "failed") return "failed";
+  return "skipped";
 }
 
 async function main(): Promise<void> {
-  const runtime = await loadRuntime();
-  const discordConfig: DiscordConfig = {
-    botToken: runtime.botToken,
-    guildId: runtime.guildId,
-    monitoredChannelIds: runtime.selectedChannelIds,
-  };
+  console.log("[discord listener] Discord listener booting");
+  const storage = createDiscordListenerStorage();
+  console.log("[discord listener] Supabase connected");
+  const botToken = readDiscordBotToken();
+  let runtimes = await loadRuntimes(storage, botToken);
+  console.log(`[discord listener] Loaded connected guild count=${runtimes.length}`);
   const client = new Client({
     intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent],
   });
   let readyForMessages = false;
-  const context = (): LiveDiscordListenerContext => ({
-    guildId: runtime.guildId,
-    selectedChannelIds: runtime.selectedChannelIds,
-    botUserId: client.user?.id ?? null,
-    onboardingEnabled: runtime.onboardingEnabled,
-    onboardingSendMode: runtime.onboardingSendMode,
-    onboardingQuestionChannelId: runtime.onboardingQuestionChannelId,
-  });
+  let refreshing = false;
+
+  async function refreshRuntimes(): Promise<void> {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      const loaded = await loadRuntimes(storage, botToken);
+      runtimes = await verifyRuntimes(client, loaded);
+      console.log(`[discord listener] configuration refreshed connected guild count=${runtimes.length}`);
+    } catch (error) {
+      reportGatewayError("[discord listener] configuration refresh failed", error);
+    } finally {
+      refreshing = false;
+    }
+  }
 
   client.once(Events.ClientReady, (readyClient) => {
-    void logReady(readyClient, runtime)
-      .then(() => {
-        readyForMessages = true;
-      })
-      .catch((error) => {
-        reportGatewayError("Discord listener stopped", error);
-        client.destroy();
-        process.exitCode = 1;
-      });
+    void verifyRuntimes(readyClient, runtimes).then((verifiedRuntimes) => {
+      runtimes = verifiedRuntimes;
+      readyForMessages = true;
+      console.log("[discord listener] Discord client ready");
+      console.log("[discord listener] Listening for workspace-scoped onboarding messages");
+      const refreshTimer = setInterval(() => void refreshRuntimes(), 60_000);
+      refreshTimer.unref();
+    }).catch((error) => {
+      reportGatewayError("Discord listener stopped", error);
+      client.destroy();
+      process.exitCode = 1;
+    });
   });
   client.on(Events.MessageCreate, (message) => {
     if (!readyForMessages) return;
     const liveMessage = toLiveDiscordMessage(message);
+    const trigger = matchClearGuideRequest(liveMessage.content);
+    const matchingRuntimes = runtimes.filter((runtime) => runtime.guildId === liveMessage.guildId);
+    const runtime = matchingRuntimes.length === 1 ? matchingRuntimes[0] : null;
+    const workspaceMatched = matchingRuntimes.length === 1;
+    const workspaceLabel = matchingRuntimes.length > 1 ? "ambiguous" : runtime?.workspaceId ?? "none";
+    console.log(`[discord listener] message guild_id=${liveMessage.guildId ?? "null"} channel_id=${liveMessage.channel.id} workspace_matched=${workspaceMatched} workspace_id=${workspaceLabel} onboarding_enabled=${runtime?.onboardingEnabled ?? false} trigger_matched=${trigger.matched}`);
+    if (!runtime) {
+      console.log(`[discord listener] message_result guild_id=${liveMessage.guildId ?? "null"} channel_id=${liveMessage.channel.id} workspace_matched=false workspace_id=${workspaceLabel} onboarding_enabled=false trigger_matched=${trigger.matched} send_decision=skipped reason=${matchingRuntimes.length > 1 ? "ambiguous_guild_workspace" : "workspace_not_matched"}`);
+      return;
+    }
+
+    const discordConfig: DiscordConfig = {
+      botToken: runtime.botToken,
+      guildId: runtime.guildId,
+      monitoredChannelIds: runtime.selectedChannelIds,
+    };
+    const context = (): LiveDiscordListenerContext => ({
+      guildId: runtime.guildId,
+      selectedChannelIds: runtime.selectedChannelIds,
+      botUserId: client.user?.id ?? null,
+      onboardingEnabled: runtime.onboardingEnabled,
+      onboardingSendMode: runtime.onboardingSendMode,
+      onboardingQuestionChannelId: runtime.onboardingQuestionChannelId,
+    });
+
     void handleLiveDiscordMessage(liveMessage, context(), {
       persistMessage: async (event, options) => {
-        await persistDiscordMessage(runtime.storage, runtime.creatorId, discordConfig, runtime.guildName, event.channel, toDiscordMessage(event), options);
+        await persistDiscordMessage(runtime.storage, runtime.creatorId, discordConfig, runtime.guildName, event.channel, toDiscordMessage(event), options, runtime.workspaceId);
       },
       logDecision: (decision) => {
-        if (decision.classification === "guide_request") return;
-        console.log(`[discord listener] settings row_id=${runtime.onboardingSettingsRowId ?? "none"} creator_id=${runtime.creatorId} connection_id=${runtime.connectionId} guild_id=${runtime.guildId} enabled=${runtime.onboardingEnabled} send_mode=${runtime.onboardingSendMode} message channel id=${decision.messageChannelId} question_channel_id=${decision.questionChannelId ?? "null"} trigger matched=${decision.triggerMatched} trigger reason=${decision.triggerReason}`);
-        if (decision.classification === "persist_only") console.log(`[discord listener] send decision: persisted_only reason=${decision.triggerMatched ? "channel_not_selected" : "trigger_not_matched"}`);
+        console.log(`[discord listener] message guild_id=${runtime.guildId} channel_id=${decision.messageChannelId} workspace_matched=true workspace_id=${runtime.workspaceId} onboarding_enabled=${decision.settingsEnabled ?? runtime.onboardingEnabled} trigger_matched=${decision.triggerMatched} trigger_reason=${decision.triggerReason} classification=${decision.classification}`);
       },
-      runGuideRequest: (input) => processDiscordListenerOnboardingMessage(runtime.storage, runtime.botToken, runtime.creatorId, input),
+      runGuideRequest: (input) => processDiscordListenerOnboardingMessage(runtime.storage, runtime.botToken, runtime.creatorId, input, runtime.workspaceId),
     }).then((result) => {
       const receipt = result.receipt ? ` receipt=${result.receipt.id}` : "";
       const sentMessage = result.receipt?.sent_message_id ? ` sent_message_id=${result.receipt.sent_message_id}` : "";
       const sentChannel = result.receipt?.status === "sent" ? ` sent_channel_id=${result.receipt.channel_id}` : "";
-      console.log(`Discord listener ${result.outcome}: message=${liveMessage.id}${receipt}${sentMessage}${sentChannel}${result.error ? ` error=${result.error}` : ""}`);
+      console.log(`[discord listener] message_result guild_id=${runtime.guildId} channel_id=${liveMessage.channel.id} workspace_matched=true workspace_id=${runtime.workspaceId} onboarding_enabled=${runtime.onboardingEnabled} trigger_matched=${trigger.matched} send_decision=${sendDecision(result.outcome)} outcome=${result.outcome} message=${liveMessage.id}${receipt}${sentMessage}${sentChannel}${result.error ? ` error=${result.error}` : ""}`);
     }).catch((error) => {
       reportGatewayError(`Discord listener failed for message ${liveMessage.id}`, error);
+      console.log(`[discord listener] message_result guild_id=${runtime.guildId} channel_id=${liveMessage.channel.id} workspace_matched=true workspace_id=${runtime.workspaceId} onboarding_enabled=${runtime.onboardingEnabled} trigger_matched=${trigger.matched} send_decision=failed outcome=failed message=${liveMessage.id}`);
     });
   });
   client.on(Events.Error, (error) => reportGatewayError("Discord client error", error));
   client.on(Events.ShardError, (error) => reportGatewayError("Discord shard error", error));
-  await client.login(runtime.botToken);
+  process.once("SIGTERM", () => { client.destroy(); process.exit(0); });
+  process.once("SIGINT", () => { client.destroy(); process.exit(0); });
+  await client.login(botToken);
 }
 
 void main().catch((error) => {

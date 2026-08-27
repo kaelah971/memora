@@ -25,6 +25,7 @@ const settings: DiscordOnboardingSettingsInput = {
   beginnerGuideText: fallbackGuide,
 };
 const context: DiscordListenerOnboardingContext = {
+  workspaceId: "00000000-0000-4000-8000-000000000001",
   creatorId: "creator-1",
   connectionId: "connection-1",
   guildId: "guild-1",

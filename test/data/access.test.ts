@@ -8,6 +8,7 @@ import { getProductionWorkspaceAccessBlock } from "../../lib/data/access-policy"
 import {
   getSupabaseConfigStatus,
   readSupabasePublicConfig,
+  readSupabaseWorkerConfig,
 } from "../../lib/supabase/config";
 import { getTrustedYouTubeClient } from "../../lib/youtube/storage";
 
@@ -42,6 +43,22 @@ test("production demo gate allows server-side Supabase workspace access", () => 
   assert.equal(getProductionWorkspaceAccessBlock(environment), null);
   assert.ok(youtubeClient);
   assert.equal(getSupabaseConfigStatus(environment).demoWorkspaceAccessEnabled, true);
+});
+
+test("the Discord worker only requires Supabase URL and service-role credentials", () => {
+  const workerConfig = readSupabaseWorkerConfig({
+    NEXT_PUBLIC_SUPABASE_URL: "https://worker.supabase.co",
+    SUPABASE_SERVICE_ROLE_KEY: "worker-service-role-key",
+  });
+
+  assert.deepEqual(workerConfig, {
+    url: "https://worker.supabase.co",
+    serviceRoleKey: "worker-service-role-key",
+  });
+  assert.throws(
+    () => readSupabaseWorkerConfig({ NEXT_PUBLIC_SUPABASE_URL: "https://worker.supabase.co" }),
+    /SUPABASE_SERVICE_ROLE_KEY/,
+  );
 });
 
 test("the service-role key remains server-only and public config excludes it", () => {

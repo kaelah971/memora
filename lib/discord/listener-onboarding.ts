@@ -15,7 +15,7 @@ import type {
 import {
   createDiscordOnboardingReceipt,
   findRecentDiscordOnboardingReceipt,
-  getDevelopmentCreator,
+  getCreatorForWorkspace,
   getDiscordConnection,
   getDiscordMemberMemory,
   getDiscordOnboardingSettings,
@@ -30,8 +30,10 @@ import {
 } from "@/lib/discord/listener-storage";
 import type { DiscordOnboardingGeneration } from "@/lib/minds/onboarding";
 import { getCreatorMindAlias } from "@/lib/workspaces/aliases";
+import { DEMO_WORKSPACE_ID } from "@/lib/workspaces/constants";
 
 export interface DiscordListenerOnboardingContext {
+  workspaceId: string;
   creatorId: string;
   connectionId: string;
   guildId: string;
@@ -159,19 +161,21 @@ function labeledChannels(
 export async function loadDiscordListenerOnboardingContext(
   storage: DiscordListenerStorage,
   creatorId: string,
+  workspaceId = DEMO_WORKSPACE_ID,
 ): Promise<DiscordListenerOnboardingContext> {
-  const connection = await getDiscordConnection(storage, creatorId);
+  const connection = await getDiscordConnection(storage, creatorId, workspaceId);
   if (!connection) throw new Error("Connect Discord before configuring community onboarding.");
-  const creator = await getDevelopmentCreator(storage);
+  const creator = await getCreatorForWorkspace(storage, creatorId, workspaceId);
   const channels = await listDiscordConnectionChannels(connection);
   const selectedChannels = channels.filter((channel) => channel.selected);
   const readableChannels = channels.filter((channel) => channel.canRead);
-  const settingsRow = await getDiscordOnboardingSettings(storage, creatorId, connection.id);
+  const settingsRow = await getDiscordOnboardingSettings(storage, creatorId, connection.id, workspaceId);
   const settings = onboardingSettingsInput(
     settingsRow,
     readableChannels.map((channel) => channel.id),
   );
   return {
+    workspaceId,
     creatorId,
     connectionId: connection.id,
     guildId: connection.guild_id,
@@ -216,7 +220,7 @@ async function createSkippedReceipt(
     sent_message_id: null,
     status: "skipped",
     reason: `${reason} destination_reason=${destination.reason}; sent_channel_id=${channel.id}.${channel ? ` Target: #${channel.name}.` : ""}`,
-  });
+  }, context.workspaceId);
 }
 
 async function runForMember(
@@ -229,6 +233,7 @@ async function runForMember(
   const duplicate = await dependencies.findRecentReceipt(storage, {
     creatorId: context.creatorId,
     connectionId: context.connectionId,
+    workspaceId: context.workspaceId,
     discordUserId: input.userId,
     triggerType: input.triggerType,
     sourceMessageId: input.sourceMessageId,
@@ -246,7 +251,7 @@ async function runForMember(
   const channel = destination ? context.channels.find((candidate) => candidate.id === destination.channelId) : null;
   if (!destination || !channel) throw new Error("Choose at least one saved Discord channel before running onboarding.");
   console.log(`[discord listener] send destination reason=${destination.reason} channel_id=${channel.id} message=${input.sourceMessageId}`);
-  const memory = await dependencies.getMemberMemory(storage, context.creatorId, input.userId);
+  const memory = await dependencies.getMemberMemory(storage, context.creatorId, input.userId, context.workspaceId);
   let generatedMessage: string;
   let mindConversationId: string | null = null;
   let generationFailureCategory: ListenerFailureCategory | null = null;
@@ -283,7 +288,7 @@ async function runForMember(
         sent_message_id: null,
         status: "failed",
         reason: listenerReason(`mind_generation_failed; category=${generationFailureCategory}; trigger_reason=${input.triggerReason}; send_mode=${context.settings.sendMode}; intended_channel_id=${channel.id}; destination_reason=${destination.reason}`),
-      });
+      }, context.workspaceId);
       return { receipt: failed, duplicate: false };
     }
   }
@@ -307,10 +312,11 @@ async function runForMember(
       : shouldSend
         ? `Generated and reserved for a configured onboarding send. trigger_reason=${input.triggerReason}; send_mode=${context.settings.sendMode}; intended_channel_id=${channel.id}; destination_reason=${destination.reason}.`
         : `Generated for creator review; send mode is ${context.settings.sendMode}. trigger_reason=${input.triggerReason}; intended_channel_id=${channel.id}; destination_reason=${destination.reason}.`),
-  });
+  }, context.workspaceId);
   let memoryResult: { interactionId: string };
   try {
     memoryResult = await dependencies.recordMemory(storage, {
+      workspaceId: context.workspaceId,
       creatorId: context.creatorId,
       connectionId: context.connectionId,
       guildId: context.guildId,
@@ -328,7 +334,7 @@ async function runForMember(
     await dependencies.updateReceipt(storage, receipt.id, {
       status: "failed",
       reason: listenerReason(reason),
-    });
+    }, context.workspaceId);
     throw new Error(reason);
   }
 
@@ -340,8 +346,8 @@ async function runForMember(
       sent_message_id: sent.id,
       status: "sent",
       reason: listenerReason(`Sent by configured ${context.settings.sendMode} onboarding rule. trigger_reason=${input.triggerReason}; send_mode=${context.settings.sendMode}; sent_channel_id=${channel.id}; destination_reason=${destination.reason}.`),
-    });
-    await dependencies.updateMemoryStatus(storage, memoryResult.interactionId, "sent", sent.id);
+    }, context.workspaceId);
+    await dependencies.updateMemoryStatus(storage, memoryResult.interactionId, "sent", sent.id, context.workspaceId);
     console.log(`[discord listener] sent_channel_id=${channel.id} sent_message_id=${sent.id} message=${input.sourceMessageId}`);
     return { receipt: sentReceipt, duplicate: false };
   } catch (error) {
@@ -350,8 +356,8 @@ async function runForMember(
     const failed = await dependencies.updateReceipt(storage, receipt.id, {
       status: "failed",
       reason: listenerReason(`discord_send_failed; category=${category}; trigger_reason=${input.triggerReason}; send_mode=${context.settings.sendMode}; intended_channel_id=${channel.id}; destination_reason=${destination.reason}`),
-    });
-    await dependencies.updateMemoryStatus(storage, memoryResult.interactionId, "failed", null);
+    }, context.workspaceId);
+    await dependencies.updateMemoryStatus(storage, memoryResult.interactionId, "failed", null, context.workspaceId);
     return { receipt: failed, duplicate: false };
   }
 }
@@ -371,21 +377,22 @@ export async function processDiscordListenerOnboardingMessage(
   botToken: string,
   creatorId: string,
   input: LiveGuideRequestInput,
+  workspaceId = DEMO_WORKSPACE_ID,
 ): Promise<LiveOnboardingRunResult> {
   if (inFlightSourceMessageIds.has(input.sourceMessageId)) {
     return { receipt: null, duplicate: true, ignored: false, error: null };
   }
   inFlightSourceMessageIds.add(input.sourceMessageId);
   try {
-    const context = await loadDiscordListenerOnboardingContext(storage, creatorId);
+    const context = await loadDiscordListenerOnboardingContext(storage, creatorId, workspaceId);
     const trigger = matchClearGuideRequest(input.sourceMessageText);
-    console.log(`[discord listener] settings row_id=${context.settingsRowId ?? "none"} creator_id=${context.creatorId} connection_id=${context.connectionId} guild_id=${context.guildId} enabled=${context.settings.enabled} send_mode=${context.settings.sendMode} message channel id=${input.sourceChannelId} question_channel_id=${context.settings.questionChannelId ?? "null"} trigger matched=${trigger.matched} trigger reason=${trigger.reason}`);
+    console.log(`[discord listener] workspace_id=${context.workspaceId} settings_row_id=${context.settingsRowId ?? "none"} creator_id=${context.creatorId} connection_id=${context.connectionId} guild_id=${context.guildId} channel_id=${input.sourceChannelId} onboarding_enabled=${context.settings.enabled} send_mode=${context.settings.sendMode} trigger_matched=${trigger.matched} trigger_reason=${trigger.reason}`);
     if (!context.monitoredChannelIds.includes(input.sourceChannelId)) {
-      console.log("[discord listener] send decision: persisted_only reason=channel_not_monitored");
+      console.log("[discord listener] send_decision=skipped reason=channel_not_monitored");
       return { receipt: null, duplicate: false, ignored: true, error: null };
     }
     if (!context.settings.enabled || !trigger.matched) {
-      console.log(`[discord listener] send decision: persisted_only reason=${context.settings.enabled ? trigger.reason : "onboarding_disabled"}`);
+      console.log(`[discord listener] send_decision=skipped reason=${context.settings.enabled ? trigger.reason : "onboarding_disabled"}`);
       return { receipt: null, duplicate: false, ignored: true, error: null };
     }
 
@@ -397,19 +404,17 @@ export async function processDiscordListenerOnboardingMessage(
         origin: "live_listener",
       });
       const sendDecision = outcome.duplicate
-        ? "persisted_only"
+        ? "skipped"
         : outcome.receipt?.status === "sent"
           ? "sent"
-          : outcome.receipt?.status === "drafted"
-            ? "drafted"
-            : outcome.receipt?.status === "failed"
-              ? "failed"
-              : "persisted_only";
+          : outcome.receipt?.status === "failed"
+            ? "failed"
+            : "skipped";
       const reason = outcome.duplicate ? "duplicate_message" : outcome.receipt?.status === "failed" ? "onboarding_failed" : null;
-      console.log(`[discord listener] send decision: ${sendDecision} message=${input.sourceMessageId}${reason ? ` reason=${reason}` : ""}${outcome.receipt ? ` receipt=${outcome.receipt.id}` : ""}`);
+      console.log(`[discord listener] workspace_id=${context.workspaceId} guild_id=${context.guildId} channel_id=${input.sourceChannelId} onboarding_enabled=${context.settings.enabled} trigger_matched=${trigger.matched} send_decision=${sendDecision} message=${input.sourceMessageId}${reason ? ` reason=${reason}` : ""}${outcome.receipt ? ` receipt=${outcome.receipt.id}` : ""}`);
       return { receipt: outcome.receipt, duplicate: outcome.duplicate, ignored: false, error: null };
     } catch (error) {
-      console.log(`[discord listener] send decision: failed message=${input.sourceMessageId}`);
+      console.log(`[discord listener] workspace_id=${context.workspaceId} guild_id=${context.guildId} channel_id=${input.sourceChannelId} onboarding_enabled=${context.settings.enabled} trigger_matched=${trigger.matched} send_decision=failed message=${input.sourceMessageId}`);
       return { receipt: null, duplicate: false, ignored: false, error: safeMessageError(error) };
     }
   } catch (error) {
