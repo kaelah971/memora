@@ -1,14 +1,15 @@
 import "server-only";
 
 import type { User } from "@supabase/supabase-js";
-import { cookies } from "next/headers";
+import { headers } from "next/headers";
 
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import { createServiceRoleSupabaseClient, getSupabaseConfigStatus } from "@/lib/supabase/config";
 import type { DataAccessStatus, DataClient } from "@/lib/data/types";
 import type { Tables, TablesInsert } from "@/lib/supabase/database.types";
-import { DEMO_WORKSPACE_ID, WORKSPACE_MODE_COOKIE } from "@/lib/workspaces/constants";
-export { DEMO_WORKSPACE_ID, WORKSPACE_MODE_COOKIE } from "@/lib/workspaces/constants";
+import { DEMO_WORKSPACE_ID } from "@/lib/workspaces/constants";
+import type { WorkspaceRoute } from "@/lib/workspaces/entry";
+export { DEMO_WORKSPACE_ID } from "@/lib/workspaces/constants";
 export { getCreatorMindAlias, getWorkspaceMindAlias } from "@/lib/workspaces/aliases";
 export { requiresWorkspaceChoice } from "@/lib/workspaces/entry";
 
@@ -32,6 +33,7 @@ export interface WorkspaceContextResult {
 export interface CurrentWorkspaceSelection {
   user: User | null;
   mode: WorkspaceMode;
+  route: WorkspaceRoute;
   demoAvailable: boolean;
   accessConfigured: boolean;
 }
@@ -73,11 +75,14 @@ async function getRequestUser(): Promise<User | null> {
 export async function getCurrentWorkspaceSelection(): Promise<CurrentWorkspaceSelection> {
   const config = getSupabaseConfigStatus(process.env);
   const user = await getRequestUser();
-  const mode = (await cookies()).get(WORKSPACE_MODE_COOKIE)?.value === "demo" ? "demo" : "mine";
+  const routeHeader = (await headers()).get("x-memora-workspace-route");
+  const route: WorkspaceRoute = routeHeader === "demo" || routeHeader === "mine" || routeHeader === "entry" ? routeHeader : "mine";
+  const mode: WorkspaceMode = route === "demo" ? "demo" : "mine";
 
   return {
     user,
     mode,
+    route,
     demoAvailable: developmentOrDemoAccessEnabled(process.env),
     accessConfigured: config.missingPublic.length === 0 && config.serviceRoleConfigured,
   };
@@ -227,7 +232,7 @@ export async function getCurrentCreator(): Promise<Tables<"creators"> | null> {
 export async function getCurrentIntegrationWorkspaceContext(): Promise<WorkspaceContextResult> {
   const context = await getCurrentWorkspaceContext();
   if (!context.data) return context;
-  if (!context.data.user && (await cookies()).get(WORKSPACE_MODE_COOKIE)?.value !== "demo") {
+  if (!context.data.user && context.data.mode !== "demo") {
     return {
       data: null,
       access: context.access,

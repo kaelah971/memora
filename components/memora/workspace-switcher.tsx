@@ -6,6 +6,7 @@ import type { User } from "@supabase/supabase-js";
 
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 import type { WorkspaceMode } from "@/lib/workspaces/access";
+import { workspaceBasePath } from "@/lib/workspaces/entry";
 
 interface WorkspaceSwitcherProps {
   mode: WorkspaceMode;
@@ -14,6 +15,8 @@ interface WorkspaceSwitcherProps {
 export function WorkspaceSwitcher({ mode }: WorkspaceSwitcherProps) {
   const router = useRouter();
   const [user, setUser] = useState<User | null | undefined>(undefined);
+  const myWorkspacePath = workspaceBasePath("mine");
+  const demoWorkspacePath = workspaceBasePath("demo");
 
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
@@ -46,14 +49,14 @@ export function WorkspaceSwitcher({ mode }: WorkspaceSwitcherProps) {
           <span className="data-label workspace-switcher__identity">{user.email ?? "SIGNED-IN CREATOR"}</span>
           <a
             className={mode === "mine" ? "workspace-switcher__active" : undefined}
-            href="/api/workspace/mode?mode=mine&next=/app"
+            href={myWorkspacePath}
             aria-current={mode === "mine" ? "page" : undefined}
           >
             MY WORKSPACE
           </a>
           <a
             className={mode === "demo" ? "workspace-switcher__active" : undefined}
-            href="/api/workspace/mode?mode=demo&next=/app"
+            href={demoWorkspacePath}
             aria-current={mode === "demo" ? "page" : undefined}
           >
             PUBLIC DEMO
@@ -62,8 +65,8 @@ export function WorkspaceSwitcher({ mode }: WorkspaceSwitcherProps) {
         </>
       ) : (
         <>
-          <a href="/api/workspace/mode?mode=mine&next=%2Flogin%3Fnext%3D%2Fapp">SIGN IN FOR MY WORKSPACE</a>
-          <a href="/api/workspace/mode?mode=demo&next=/app">VIEW PUBLIC DEMO</a>
+          <a href={myWorkspacePath}>SIGN IN FOR MY WORKSPACE</a>
+          <a href={demoWorkspacePath}>VIEW PUBLIC DEMO</a>
         </>
       )}
     </div>

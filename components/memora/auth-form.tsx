@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
+import { workspaceBasePath } from "@/lib/workspaces/entry";
 
 type AuthMode = "sign_in" | "sign_up";
 
@@ -11,10 +12,6 @@ function getSafeNextPath(): string {
   if (typeof window === "undefined") return "/app";
   const value = new URLSearchParams(window.location.search).get("next");
   return value && value.startsWith("/") && !value.startsWith("//") ? value : "/app";
-}
-
-function getPersonalWorkspacePath(): string {
-  return `/api/workspace/mode?mode=mine&next=${encodeURIComponent(getSafeNextPath())}`;
 }
 
 export function AuthForm() {
@@ -30,7 +27,7 @@ export function AuthForm() {
     let active = true;
     void supabase.auth.getUser().then(({ data }) => {
       if (!active) return;
-      if (data.user) router.push(getPersonalWorkspacePath());
+      if (data.user) router.push(getSafeNextPath());
       else setStatus("");
     });
     return () => {
@@ -63,7 +60,7 @@ export function AuthForm() {
       return;
     }
 
-    router.push(getPersonalWorkspacePath());
+    router.push(getSafeNextPath());
   }
 
   return (
@@ -106,7 +103,7 @@ export function AuthForm() {
           {mode === "sign_in" ? "CREATE AN ACCOUNT" : "SIGN IN INSTEAD"}
         </button>
       </div>
-      <a className="secondary-link" href="/api/workspace/mode?mode=demo&next=/app">
+      <a className="secondary-link" href={workspaceBasePath("demo")}>
         VIEW PUBLIC DEMO <span aria-hidden="true">↗</span>
       </a>
     </section>

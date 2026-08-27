@@ -26,7 +26,7 @@ export function LandingPage() {
             MEMORA
           </a>
           <span className="site-header__descriptor">PERSISTENT AUDIENCE MEMORY</span>
-          <PrimaryButton href="/api/workspace/mode?mode=demo&next=/app">Open Demo</PrimaryButton>
+          <PrimaryButton href="/app/demo">Open Demo</PrimaryButton>
         </div>
       </header>
 
@@ -35,7 +35,7 @@ export function LandingPage() {
           <BrowserWindow chromeLabel="memora / memory thread" title="Memora memory thread">
             <WindowNavigation
               items={landingNavigation}
-              action={<PrimaryButton href="/api/workspace/mode?mode=demo&next=/app">Open Demo</PrimaryButton>}
+              action={<PrimaryButton href="/app/demo">Open Demo</PrimaryButton>}
             />
             <div className="hero-grid">
               <div className="hero-copy">
@@ -48,8 +48,8 @@ export function LandingPage() {
                   audience&mdash;then shows who to follow up with next.
                 </p>
                 <div className="hero-actions">
-                  <PrimaryButton href="/api/workspace/mode?mode=demo&next=/app">View Public Demo</PrimaryButton>
-                  <PrimaryButton className="primary-button--outline" href="/api/workspace/mode?mode=mine&next=%2Flogin%3Fnext%3D%2Fapp">Create My Workspace</PrimaryButton>
+                  <PrimaryButton href="/app/demo">View Public Demo</PrimaryButton>
+                  <PrimaryButton className="primary-button--outline" href="/app/my">Create My Workspace</PrimaryButton>
                   <SecondaryLink href="#how-it-works">SEE HOW IT REMEMBERS</SecondaryLink>
                 </div>
                 <p className="hand-note hero-copy__note">A growing audience should not erase the people in it.</p>
@@ -152,7 +152,7 @@ export function LandingPage() {
               <div className="notice-window__reason">
                 <span className="section-label">WHY THIS MATTERS</span>
                 <p className="notice-window__quote">The new video answers the question Alex left behind.</p>
-                <SecondaryLink href="/app/follow-up">Open the follow-up shell</SecondaryLink>
+                  <SecondaryLink href="/app/demo/follow-up">Open the follow-up shell</SecondaryLink>
               </div>
             </div>
           </BrowserWindow>
@@ -181,7 +181,7 @@ export function LandingPage() {
               <div className="reconnect-action">
                 <StateSticker tone="ready">FOLLOW-UP READY</StateSticker>
                 <strong>Review follow-up with the new video.</strong>
-                <PrimaryButton href="/app/follow-up">REVIEW FOLLOW-UP</PrimaryButton>
+                <PrimaryButton href="/app/demo/follow-up">REVIEW FOLLOW-UP</PrimaryButton>
               </div>
             </div>
           </ProofPanel>
@@ -281,7 +281,7 @@ export function LandingPage() {
           <div className="final-cta__mark" aria-hidden="true">MEMORA</div>
           <h2 id="final-title">Keep the next conversation from becoming another forgotten comment.</h2>
           <p>Open the frontend shell and follow the thread from the creator&apos;s desk.</p>
-          <PrimaryButton href="/api/workspace/mode?mode=demo&next=/app">View Public Demo</PrimaryButton>
+          <PrimaryButton href="/app/demo">View Public Demo</PrimaryButton>
         </section>
       </main>
 

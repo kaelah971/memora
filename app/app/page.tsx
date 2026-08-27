@@ -4,6 +4,7 @@ import { ProductEmptyState } from "@/components/memora/product-empty-state";
 import { WorkspaceEntryChoice } from "@/components/memora/workspace-entry-choice";
 import { getCreatorWorkspaceSummary } from "@/lib/data/creators";
 import { getCurrentWorkspaceSelection, requiresWorkspaceChoice } from "@/lib/workspaces/access";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,9 @@ function CountBlock({ label, value }: { label: string; value: number }) {
 
 export default async function AppHomePage() {
   const selection = await getCurrentWorkspaceSelection();
+
+  if (selection.route === "entry" && selection.user) redirect("/app/my");
+  if (selection.route === "mine" && !selection.user) redirect("/login?next=%2Fapp%2Fmy");
 
   if (requiresWorkspaceChoice(selection)) {
     return (

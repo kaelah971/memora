@@ -10,25 +10,36 @@ import { StateSticker } from "@/components/memora/state-sticker";
 import { WindowNavigation, type WindowNavItem } from "@/components/memora/window-navigation";
 import { WorkspaceSwitcher } from "@/components/memora/workspace-switcher";
 import type { WorkspaceMode } from "@/lib/workspaces/access";
-
-const appNavigation = [
-  { href: "/app", label: "HOME" },
-  { href: "/app/memory", label: "MEMORY" },
-  { href: "/app/import", label: "IMPORT" },
-  { href: "/app/queue", label: "QUEUE" },
-  { href: "/app/follow-up", label: "FOLLOW UP" },
-  { href: "/app/proof", label: "PROOF" },
-] satisfies readonly WindowNavItem[];
+import { workspaceBasePath, type WorkspaceRoute } from "@/lib/workspaces/entry";
 
 interface AppShellProps {
   children: ReactNode;
   isAuthenticated: boolean;
   workspaceMode: WorkspaceMode;
+  workspaceRoute: WorkspaceRoute;
 }
 
-export function AppShell({ children, isAuthenticated, workspaceMode }: AppShellProps) {
+function navigationPath(pathname: string, basePath: string): string {
+  if (pathname === basePath || pathname.startsWith(`${basePath}/`)) return pathname;
+  if (pathname === "/app") return basePath;
+  return pathname.startsWith("/app/") ? `${basePath}${pathname.slice("/app".length)}` : pathname;
+}
+
+export function AppShell({ children, isAuthenticated, workspaceMode, workspaceRoute }: AppShellProps) {
   const pathname = usePathname();
-  const activeHref = pathname === "/app" ? "/app" : appNavigation.find((item) => pathname.startsWith(item.href) && item.href !== "/app")?.href;
+  const basePath = workspaceRoute === "entry" ? "/app" : workspaceBasePath(workspaceMode);
+  const appNavigation = [
+    { href: basePath, label: "HOME" },
+    { href: `${basePath}/memory`, label: "MEMORY" },
+    { href: `${basePath}/import`, label: "IMPORT" },
+    { href: `${basePath}/queue`, label: "QUEUE" },
+    { href: `${basePath}/follow-up`, label: "FOLLOW UP" },
+    { href: `${basePath}/proof`, label: "PROOF" },
+  ] satisfies readonly WindowNavItem[];
+  const currentNavigationPath = navigationPath(pathname, basePath);
+  const activeHref = currentNavigationPath === basePath
+    ? basePath
+    : appNavigation.find((item) => currentNavigationPath.startsWith(item.href) && item.href !== basePath)?.href;
   const isDemo = workspaceMode === "demo";
   const workspaceLabel = isDemo ? "PUBLIC DEMO WORKSPACE" : isAuthenticated ? "MY CREATOR WORKSPACE" : "CHOOSE A WORKSPACE";
   const workspaceDescription = isDemo
@@ -60,7 +71,7 @@ export function AppShell({ children, isAuthenticated, workspaceMode }: AppShellP
             action={
               <div className="window-navigation__workspace-actions">
                 <WorkspaceSwitcher mode={workspaceMode} />
-                <a className="window-navigation__settings" href="/app/settings">SETTINGS</a>
+                <a className="window-navigation__settings" href={`${basePath}/settings`}>SETTINGS</a>
               </div>
             }
           />

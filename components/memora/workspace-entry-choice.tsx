@@ -20,9 +20,9 @@ export function WorkspaceEntryChoice({ demoAvailable }: WorkspaceEntryChoiceProp
         <article className="workspace-entry__option workspace-entry__option--demo">
           <StateSticker tone="active">PUBLIC DEMO</StateSticker>
           <h3>Explore the public memory</h3>
-          <p>See Alex&apos;s audience thread, open questions and follow-up proof without an account.</p>
+          <p>{demoAvailable ? "See Alex's audience thread, open questions and follow-up proof without an account." : "The public demo is not enabled in this environment yet."}</p>
           {demoAvailable ? (
-            <PrimaryButton href="/api/workspace/mode?mode=demo&next=/app">VIEW PUBLIC DEMO</PrimaryButton>
+            <PrimaryButton href="/app/demo">VIEW PUBLIC DEMO</PrimaryButton>
           ) : (
             <span className="data-label workspace-entry__unavailable">PUBLIC DEMO IS NOT ENABLED HERE</span>
           )}
@@ -31,7 +31,7 @@ export function WorkspaceEntryChoice({ demoAvailable }: WorkspaceEntryChoiceProp
           <StateSticker tone="approved">MY WORKSPACE</StateSticker>
           <h3>Build your own memory desk</h3>
           <p>Create a private workspace for your audience sources, memories and creator-approved actions.</p>
-          <PrimaryButton href="/api/workspace/mode?mode=mine&next=%2Flogin%3Fnext%3D%2Fapp">CREATE MY WORKSPACE</PrimaryButton>
+          <PrimaryButton href="/app/my">CREATE MY WORKSPACE</PrimaryButton>
         </article>
       </div>
       <p className="workspace-entry__note hand-note">No account is needed to look around. Sign in when you are ready to make it yours.</p>
