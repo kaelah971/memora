@@ -37,12 +37,14 @@
 
 html {
   background: var(--notebook-cream);
+  overflow-x: hidden;
   scroll-behavior: smooth;
 }
 
 body {
   min-width: 320px;
   margin: 0;
+  overflow-x: hidden;
   color: var(--ink);
   background-color: var(--notebook-cream);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='1600' height='32' viewBox='0 0 1600 32'%3E%3Cpath d='M0 31.5H1600' stroke='%23DED9CE' stroke-opacity='.48'/%3E%3C/svg%3E");
@@ -258,6 +260,7 @@ select {
 }
 
 .browser-window {
+  max-width: 100%;
   overflow: hidden;
   border: 1.5px solid var(--ink);
   border-radius: 10px 10px 0 0;
@@ -303,6 +306,7 @@ select {
 }
 
 .browser-chrome__label {
+  min-width: 0;
   overflow: hidden;
   color: var(--muted-ink);
   font-family: var(--font-evidence-stack);
@@ -315,6 +319,7 @@ select {
 }
 
 .browser-window__body {
+  min-width: 0;
   padding: 24px;
 }
 
@@ -542,6 +547,7 @@ select {
 }
 
 .memory-thread__content {
+  min-width: 0;
   min-height: 148px;
   padding: 14px;
   border: 1.5px solid var(--ink);
@@ -569,6 +575,11 @@ select {
   color: var(--muted-ink);
   font-size: 13px;
   line-height: 19px;
+}
+
+.memory-thread__content strong,
+.memory-thread__content p {
+  overflow-wrap: anywhere;
 }
 
 .memory-thread--compact .memory-thread__content {
@@ -1284,6 +1295,7 @@ select {
 }
 
 .app-screen {
+  min-width: 0;
   padding: 8px 0 16px;
 }
 
@@ -3573,12 +3585,14 @@ select {
   .window-navigation__items {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-width: 0;
     justify-content: stretch;
     gap: 2px;
   }
 
   .window-navigation__item {
     min-width: 0;
+    overflow-wrap: anywhere;
     padding-right: 6px;
     padding-left: 6px;
     font-size: 11px;
@@ -3651,6 +3665,12 @@ select {
     flex-direction: column;
   }
 
+  .judge-proof__section > *,
+  .judge-proof__hero > *,
+  .judge-proof__path > * {
+    min-width: 0;
+  }
+
   .judge-proof__opportunity-thread > div {
     padding-right: 0;
     padding-bottom: 16px;
@@ -3691,12 +3711,17 @@ select {
     font-size: clamp(36px, 11vw, 54px);
   }
 
+  .hero-title__circled {
+    white-space: normal;
+  }
+
   .hero-copy__lead {
     font-size: 17px;
     line-height: 26px;
   }
 
   .hero-evidence {
+    width: 100%;
     padding: 14px;
   }
 
@@ -3707,6 +3732,8 @@ select {
 
   .memory-thread__list {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
     gap: 14px;
   }
 
@@ -3719,6 +3746,7 @@ select {
   }
 
   .memory-thread__node {
+    width: 100%;
     padding-top: 0;
     padding-left: 28px;
   }
@@ -3729,6 +3757,7 @@ select {
   }
 
   .memory-thread__content {
+    width: 100%;
     min-height: auto;
   }
 
@@ -3846,6 +3875,10 @@ select {
     align-items: start;
   }
 
+  .discord-connect-card {
+    grid-template-columns: 1fr;
+  }
+
   .discord-channel-picker__list {
     grid-template-columns: 1fr;
   }
@@ -3918,7 +3951,7 @@ select {
 
   .final-cta {
     padding-top: 96px;
-    padding-bottom: 96px;
+    padding-bottom: calc(96px + env(safe-area-inset-bottom));
   }
 }
 
@@ -3979,7 +4012,7 @@ select {
   }
 
   .hero-copy h1 {
-    font-size: clamp(34px, 11vw, 46px);
+    font-size: clamp(32px, 10.5vw, 44px);
   }
 
   .hero-title__circled {
@@ -4054,6 +4087,10 @@ select {
     min-height: calc(100vh - 190px);
   }
 
+  .app-shell__main {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+
   .minds-proof__connection-grid {
     grid-template-columns: 1fr;
   }
@@ -4070,6 +4107,19 @@ select {
   .audience-history__item,
   .follow-up-queue__summary {
     grid-template-columns: 1fr;
+  }
+
+  .discord-connection__facts {
+    grid-template-columns: 1fr;
+  }
+
+  .discord-onboarding__debug,
+  .discord-onboarding__debug dd,
+  .discord-onboarding__receipts .data-label,
+  .discord-import-summary__channels span,
+  .discord-import-summary__channels strong,
+  .audience-history__source {
+    overflow-wrap: anywhere;
   }
 
   .follow-up-card,
@@ -4092,6 +4142,12 @@ select {
 
   .audience-history__timeline {
     grid-column: auto;
+  }
+
+  .judge-proof__links {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 12px;
   }
 }
 
