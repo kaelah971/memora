@@ -125,6 +125,7 @@ test("opportunity builder creates a demo fallback opportunity", () => {
   assert.equal(opportunity.creatorEventTitle, "My Beginner Editing Workflow");
   assert.equal(opportunity.creatorEventVideoUrl, null);
   assert.doesNotMatch(opportunity.suggestedReply, /youtube\.com|youtu\.be|watch\?v=/i);
+  assert.match(opportunity.suggestedReply, /make a follow-up .* first/i);
   assert.match(opportunity.whyNow, /shares editing, software/i);
 });
 
@@ -156,7 +157,7 @@ test("imported YouTube records are preferred and proof fields are complete", () 
     event: {
       ...dataset().creatorEvents[0],
       source_id: importedEventSource.id,
-      payload: { platform: "youtube", topic: "beginner editing software and workflow" },
+      payload: { platform: "youtube", topic: "beginner editing software and workflow", video_id: "abcDEF12345" },
     },
     interaction: {
       ...dataset().interactions[0],
@@ -189,6 +190,29 @@ test("follow-up video links require a real YouTube video ID from the matching ev
   assert.equal(extractYouTubeVideoId("https://youtu.be/abcDEF12345?t=30"), "abcDEF12345");
   assert.equal(extractYouTubeVideoId("https://www.youtube.com/watch?v=demo-video"), null);
   assert.equal(getCreatorEventYouTubeVideoUrl(event, eventSource), null);
+
+  const importedEventSource = source({
+    id: "imported-event-source-1",
+    platform: "youtube",
+    source_type: "video",
+    external_id: "legacy-source-id",
+    url: "https://www.youtube.com/watch?v=abcDEF12345",
+    metadata: { youtube_channel_id: "real-channel" },
+  });
+  const legacyEvent = {
+    ...event,
+    source_id: importedEventSource.id,
+    external_id: "legacy-event-id",
+    payload: { platform: "youtube" },
+  };
+  assert.equal(getCreatorEventYouTubeVideoUrl(legacyEvent, importedEventSource), null);
+  assert.equal(
+    getCreatorEventYouTubeVideoUrl(
+      { ...legacyEvent, payload: { platform: "youtube", video_url: "https://youtu.be/abcDEF12345" } },
+      importedEventSource,
+    ),
+    "https://www.youtube.com/watch?v=abcDEF12345",
+  );
 });
 
 test("imported Discord records create a draft-only source-backed opportunity", () => {
@@ -269,7 +293,7 @@ test("creator voice changes the deterministic draft without changing source fact
   });
 
   assert.ok(opportunity);
-  assert.match(opportunity.suggestedReply, /simple place to start/i);
+  assert.match(opportunity.suggestedReply, /make a simple follow-up .* first/i);
   assert.doesNotMatch(opportunity.suggestedReply, /example\.com/);
   assert.match(opportunity.commentText, /editing software/i);
 });
@@ -301,6 +325,30 @@ test("approval and dismissal state comes from the latest creator action", () => 
     dataOrigin: "demo-seed-fallback",
   });
   assert.equal(dismissed.status, "dismissed");
+});
+
+test("persisted unsafe review text never replaces the recomputed safe draft", () => {
+  const input = dataset({
+    action: {
+      id: "unsafe-action-1",
+      creator_id: "creator-1",
+      audience_member_id: "member-1",
+      interaction_id: "interaction-1",
+      creator_event_id: "event-1",
+      action_type: "follow_up",
+      status: "approved",
+      text: "Old draft https://www.youtube.com/watch?v=_IjuW9L6C2A",
+      created_at: "2026-08-26T10:00:00.000Z",
+      completed_at: null,
+      metadata: { delivery_status: "not_sent" },
+    },
+  });
+
+  const [opportunity] = buildFollowUpOpportunities({ ...input, dataOrigin: "demo-seed-fallback" });
+
+  assert.equal(opportunity.status, "needs_review");
+  assert.doesNotMatch(opportunity.suggestedReply, /_IjuW9L6C2A|youtube\.com|watch\?v=/i);
+  assert.match(opportunity.suggestedReply, /make a follow-up .* first/i);
 });
 
 test("posted reply proof changes the opportunity state without claiming draft-only", () => {

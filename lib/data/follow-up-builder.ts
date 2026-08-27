@@ -297,6 +297,7 @@ function stringMetadata(value: unknown): string | null {
 }
 
 const YOUTUBE_VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
+const URL_PATTERN = /https?:\/\/[^\s<>"')]+/gi;
 const YOUTUBE_HOSTS = new Set([
   "youtu.be",
   "youtube.com",
@@ -338,15 +339,26 @@ export function getCreatorEventYouTubeVideoId(
   if (!isImportedYouTubeEvent(event, eventSource)) return null;
   const payload = isRecord(event.payload) ? event.payload : {};
   const metadata = isRecord(eventSource?.metadata) ? eventSource.metadata : {};
-  const candidates = [
+  const payloadCandidates = [
     payload.video_id,
     payload.youtube_video_id,
     payload.video_url,
-    metadata.youtube_video_id,
-    eventSource?.external_id,
-    eventSource?.url,
   ];
-  return candidates.reduce<string | null>((videoId, candidate) => videoId ?? extractYouTubeVideoId(typeof candidate === "string" ? candidate : null), null);
+  const payloadVideoId = payloadCandidates.reduce<string | null>(
+    (videoId, candidate) => videoId ?? extractYouTubeVideoId(typeof candidate === "string" ? candidate : null),
+    null,
+  );
+  if (payloadVideoId) return payloadVideoId;
+
+  const eventVideoId = extractYouTubeVideoId(event.external_id);
+  if (eventVideoId) return eventVideoId;
+
+  const sourceVideoId = extractYouTubeVideoId(stringMetadata(metadata.youtube_video_id));
+  const sourceExternalId = extractYouTubeVideoId(eventSource?.external_id);
+  const sourceUrlId = extractYouTubeVideoId(eventSource?.url);
+  if (sourceVideoId && sourceVideoId === sourceExternalId) return sourceVideoId;
+  if (sourceUrlId && sourceUrlId === sourceExternalId) return sourceUrlId;
+  return null;
 }
 
 export function getCreatorEventYouTubeVideoUrl(
@@ -355,6 +367,16 @@ export function getCreatorEventYouTubeVideoUrl(
 ): string | null {
   const videoId = getCreatorEventYouTubeVideoId(event, eventSource);
   return videoId ? `https://www.youtube.com/watch?v=${videoId}` : null;
+}
+
+function draftLinksAreSafe(draft: string | null | undefined, trustedVideoUrl: string | null): boolean {
+  if (!draft) return false;
+  const links = draft.match(URL_PATTERN) ?? [];
+  return links.every((candidate) => {
+    const punctuation = candidate.match(/[.,!?;:]+$/)?.[0] ?? "";
+    const bareCandidate = candidate.slice(0, candidate.length - punctuation.length);
+    return Boolean(trustedVideoUrl && bareCandidate === trustedVideoUrl);
+  });
 }
 
 function sourceDescription(source: Source | undefined): string | null {
@@ -453,16 +475,16 @@ function suggestedReplyForVoice(
   const destination = eventUrl ? ` ${eventUrl}` : "";
   switch (voice) {
     case "direct":
-      return `${safeMemberName}, you asked “${safeCommentText}” and this new content answers it: ${safeEventTitle}.${destination}`;
+      return `${safeMemberName}, you asked “${safeCommentText}” and ${eventUrl ? `this new content answers it: ${safeEventTitle}.${destination}` : `I'm going to make a follow-up on ${safeEventTitle} first.`}`;
     case "beginner-friendly":
-      return `Hi ${safeMemberName}, you asked “${safeCommentText}”. This is a simple place to start: ${safeEventTitle}.${destination}`;
+      return `Hi ${safeMemberName}, you asked “${safeCommentText}”. ${eventUrl ? `This is a simple place to start: ${safeEventTitle}.${destination}` : `I'm going to make a simple follow-up on ${safeEventTitle} first.`}`;
     case "professional":
-      return `Hi ${safeMemberName}, following up on your question: “${safeCommentText}”. This new content may be useful: ${safeEventTitle}.${destination}`;
+      return `Hi ${safeMemberName}, following up on your question: “${safeCommentText}”. ${eventUrl ? `This new content may be useful: ${safeEventTitle}.${destination}` : `I'm going to make a useful follow-up on ${safeEventTitle} first.`}`;
     case "playful":
-      return `Hey ${safeMemberName}, circling back to your “${safeCommentText}” question. This new content might be just the thing: ${safeEventTitle}.${destination}`;
+      return `Hey ${safeMemberName}, circling back to your “${safeCommentText}” question. ${eventUrl ? `This new content might be just the thing: ${safeEventTitle}.${destination}` : `I may make a follow-up on ${safeEventTitle} first.`}`;
     case "warm":
     default:
-      return `Hey ${safeMemberName}, you asked “${safeCommentText}” and I thought this new video might help: ${safeEventTitle}${eventUrl ? ` - ${eventUrl}` : "."}`;
+      return `Hey ${safeMemberName}, you asked “${safeCommentText}” and ${eventUrl ? `I thought this new video might help: ${safeEventTitle} - ${eventUrl}` : `I'm going to make a follow-up on ${safeEventTitle} first.`}`;
   }
 }
 
@@ -594,6 +616,11 @@ export function buildFollowUpOpportunities(input: FollowUpBuildInput): FollowUpO
       match.event.title,
       getCreatorEventYouTubeVideoUrl(match.event, match.eventSource),
     );
+    const currentAction = actionsByKey.get(actionKey(interaction.id, match.event.id));
+    const calculatedStatus = statusForAction(actionsByKey, postedRepliesByKey, interaction.id, match.event.id);
+    const status = calculatedStatus === "approved" && !draftLinksAreSafe(currentAction?.text, getCreatorEventYouTubeVideoUrl(match.event, match.eventSource))
+      ? "needs_review"
+      : calculatedStatus;
     const confidenceLabel = question && match.matchedTerms.length >= 2
       ? "Strong evidence: open question plus shared topic"
       : match.sameSource
@@ -623,7 +650,7 @@ export function buildFollowUpOpportunities(input: FollowUpBuildInput): FollowUpO
       whyNow,
       suggestedReply,
       confidenceLabel,
-      status: statusForAction(actionsByKey, postedRepliesByKey, interaction.id, match.event.id),
+       status,
        replyStatus: postedRepliesByKey.has(actionKey(interaction.id, match.event.id)) ? "posted" : "draft_only",
        postedReply: postedRepliesByKey.get(actionKey(interaction.id, match.event.id)) ?? null,
        mindReasoning: mindReasoningByOpportunity.get(`follow-up:${interaction.id}:${match.event.id}`) ?? null,

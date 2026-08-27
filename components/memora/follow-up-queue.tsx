@@ -274,8 +274,22 @@ function FollowUpCard({ opportunity }: { opportunity: FollowUpOpportunity }) {
             </div>
             <span className="data-label">DRAFT ONLY / NOT SENT</span>
           </div>
-          <p className="follow-up-card__draft-copy">{opportunity.suggestedReply}</p>
-          <div className="follow-up-card__draft-footer">
+           <p className="follow-up-card__draft-copy">{opportunity.suggestedReply}</p>
+           <div className="follow-up-card__draft-video-status">
+             <span className="data-label">FOLLOW-UP VIDEO STATUS</span>
+             {opportunity.creatorEventVideoUrl ? (
+               <a
+                 href={opportunity.creatorEventVideoUrl}
+                 target="_blank"
+                 rel="noreferrer"
+               >
+                 Follow-up video attached
+               </a>
+             ) : (
+               <span>No follow-up video attached yet.</span>
+             )}
+           </div>
+           <div className="follow-up-card__draft-footer">
             <span className="follow-up-card__confidence">{opportunity.confidenceLabel}</span>
             <button className="secondary-button" type="button" onClick={copyDraft}>
               {copyState === "copied" ? "COPIED DRAFT" : copyState === "failed" ? "COPY UNAVAILABLE" : "COPY SUGGESTED REPLY"}
