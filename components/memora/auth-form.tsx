@@ -7,6 +7,16 @@ import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
 
 type AuthMode = "sign_in" | "sign_up";
 
+function getSafeNextPath(): string {
+  if (typeof window === "undefined") return "/app";
+  const value = new URLSearchParams(window.location.search).get("next");
+  return value && value.startsWith("/") && !value.startsWith("//") ? value : "/app";
+}
+
+function getPersonalWorkspacePath(): string {
+  return `/api/workspace/mode?mode=mine&next=${encodeURIComponent(getSafeNextPath())}`;
+}
+
 export function AuthForm() {
   const router = useRouter();
   const [mode, setMode] = useState<AuthMode>("sign_in");
@@ -20,7 +30,7 @@ export function AuthForm() {
     let active = true;
     void supabase.auth.getUser().then(({ data }) => {
       if (!active) return;
-      if (data.user) router.replace("/app");
+      if (data.user) router.push(getPersonalWorkspacePath());
       else setStatus("");
     });
     return () => {
@@ -53,8 +63,7 @@ export function AuthForm() {
       return;
     }
 
-    router.replace("/app");
-    router.refresh();
+    router.push(getPersonalWorkspacePath());
   }
 
   return (

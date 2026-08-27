@@ -10,6 +10,7 @@ import type { Tables, TablesInsert } from "@/lib/supabase/database.types";
 import { DEMO_WORKSPACE_ID, WORKSPACE_MODE_COOKIE } from "@/lib/workspaces/constants";
 export { DEMO_WORKSPACE_ID, WORKSPACE_MODE_COOKIE } from "@/lib/workspaces/constants";
 export { getCreatorMindAlias, getWorkspaceMindAlias } from "@/lib/workspaces/aliases";
+export { requiresWorkspaceChoice } from "@/lib/workspaces/entry";
 
 export type WorkspaceMode = "mine" | "demo";
 
@@ -26,6 +27,13 @@ export interface WorkspaceContextResult {
   data: CurrentWorkspaceContext | null;
   access: DataAccessStatus;
   error: string | null;
+}
+
+export interface CurrentWorkspaceSelection {
+  user: User | null;
+  mode: WorkspaceMode;
+  demoAvailable: boolean;
+  accessConfigured: boolean;
 }
 
 function unavailable(reason: string): WorkspaceContextResult {
@@ -60,6 +68,19 @@ async function getRequestUser(): Promise<User | null> {
   } catch {
     return null;
   }
+}
+
+export async function getCurrentWorkspaceSelection(): Promise<CurrentWorkspaceSelection> {
+  const config = getSupabaseConfigStatus(process.env);
+  const user = await getRequestUser();
+  const mode = (await cookies()).get(WORKSPACE_MODE_COOKIE)?.value === "demo" ? "demo" : "mine";
+
+  return {
+    user,
+    mode,
+    demoAvailable: developmentOrDemoAccessEnabled(process.env),
+    accessConfigured: config.missingPublic.length === 0 && config.serviceRoleConfigured,
+  };
 }
 
 async function getDemoContext(client: DataClient, status: DataAccessStatus, user: User | null): Promise<WorkspaceContextResult> {
@@ -170,8 +191,8 @@ async function ensureUserWorkspace(client: DataClient, user: User, status: DataA
 
 export async function getCurrentWorkspaceContext(): Promise<WorkspaceContextResult> {
   const environment = process.env;
-  const config = getSupabaseConfigStatus(environment);
-  if (config.missingPublic.length > 0 || !config.serviceRoleConfigured) {
+  const selection = await getCurrentWorkspaceSelection();
+  if (!selection.accessConfigured) {
     return unavailable("Configure Supabase public variables and SUPABASE_SERVICE_ROLE_KEY for workspace access.");
   }
 
@@ -182,21 +203,17 @@ export async function getCurrentWorkspaceContext(): Promise<WorkspaceContextResu
     return unavailable(error instanceof Error ? error.message : "Supabase configuration could not be loaded.");
   }
 
-  const user = await getRequestUser();
+  const { user, mode, demoAvailable } = selection;
   const status: DataAccessStatus = {
     available: true,
     mode: user ? "authenticated" : "service_role",
     reason: null,
   };
-  const mode = (await cookies()).get(WORKSPACE_MODE_COOKIE)?.value === "demo" ? "demo" : "mine";
-  const demoAllowed = developmentOrDemoAccessEnabled(environment);
-
   if (user && mode !== "demo") return ensureUserWorkspace(client, user, status);
-  if (mode === "demo" && demoAllowed) return getDemoContext(client, status, user);
-  if (!user && demoAllowed) return getDemoContext(client, status, null);
+  if (mode === "demo" && demoAvailable) return getDemoContext(client, status, user);
   if (user) return ensureUserWorkspace(client, user, status);
 
-  return unavailable("Sign in to create your workspace, or enable the public demo workspace on the server.");
+  return unavailable("Choose the public demo or sign in to create your workspace.");
 }
 
 export async function getCurrentWorkspace(): Promise<Tables<"workspaces"> | null> {

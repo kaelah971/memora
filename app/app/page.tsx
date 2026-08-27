@@ -1,7 +1,9 @@
 import { AppScreen } from "@/components/memora/app-screen";
 import { DataSetupState } from "@/components/memora/data-setup-state";
 import { ProductEmptyState } from "@/components/memora/product-empty-state";
+import { WorkspaceEntryChoice } from "@/components/memora/workspace-entry-choice";
 import { getCreatorWorkspaceSummary } from "@/lib/data/creators";
+import { getCurrentWorkspaceSelection, requiresWorkspaceChoice } from "@/lib/workspaces/access";
 
 export const dynamic = "force-dynamic";
 
@@ -15,14 +17,29 @@ function CountBlock({ label, value }: { label: string; value: number }) {
 }
 
 export default async function AppHomePage() {
+  const selection = await getCurrentWorkspaceSelection();
+
+  if (requiresWorkspaceChoice(selection)) {
+    return (
+      <AppScreen
+        eyebrow="MEMORA / ENTRY"
+        title="Choose your workspace."
+        description="Start with the public demo, or sign in to keep your own audience memory separate."
+        status="WORKSPACE / CHOOSE"
+      >
+        <WorkspaceEntryChoice demoAvailable={selection.demoAvailable} />
+      </AppScreen>
+    );
+  }
+
   const result = await getCreatorWorkspaceSummary();
 
   return (
     <AppScreen
       eyebrow="MEMORA / HOME"
-      title="Your memory desk is ready."
-      description="P1 now reads deterministic creator context when the local Supabase access path is configured."
-      status="DATABASE STATE / P1"
+      title={result.data?.creator.display_name ? `${result.data.creator.display_name}'s memory desk.` : "Your memory desk is ready."}
+      description="Your workspace keeps source evidence, audience memory and follow-up decisions in one place."
+      status={result.data?.creator.display_name ? "WORKSPACE / CONNECTED" : "DATABASE STATE / P1"}
     >
       {!result.access.available ? (
         <DataSetupState reason={result.error ?? "Supabase data access is not configured."} />
