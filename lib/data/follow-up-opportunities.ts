@@ -75,6 +75,7 @@ export async function listFollowUpOpportunities(
   return {
     data: {
       opportunities: buildFollowUpOpportunities({
+        workspaceId,
         members,
         interactions,
         sources,

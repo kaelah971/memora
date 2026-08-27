@@ -42,6 +42,7 @@ function opportunity(status: FollowUpOpportunity["status"] = "needs_review"): Fo
     commentPublishedAt: "2026-08-24T10:00:00.000Z",
     sourceId: "source-1",
     sourceTitle: "Editing Workflow",
+    sourceVideoId: null,
     sourceDescription: null,
     sourceUrl: "https://www.youtube.com/watch?v=video-1",
     sourcePlatform: "youtube",

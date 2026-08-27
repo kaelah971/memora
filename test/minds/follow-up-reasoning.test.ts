@@ -19,6 +19,7 @@ function opportunity(overrides: Partial<FollowUpOpportunity> = {}): FollowUpOppo
     commentPublishedAt: "2026-08-24T10:00:00.000Z",
     sourceId: "source-1",
     sourceTitle: "Beginner Editing Workflow",
+    sourceVideoId: null,
     sourceDescription: "A stored description about beginner editing.",
     sourceUrl: "https://www.youtube.com/watch?v=video-1",
     sourcePlatform: "youtube",
@@ -67,6 +68,8 @@ test("reasoning prompt contains only server-resolved facts and safety instructio
   assert.match(prompt, /FAN_QUESTION:/);
   assert.match(prompt, /ATTACHED_VIDEO_STATUS:/);
   assert.match(prompt, /Never invent a URL/);
+  assert.match(prompt, /source video is where the fan commented, not the follow-up video/i);
+  assert.match(prompt, /different verified video ID/i);
   assert.match(prompt, /Do not invent unseen history/);
   assert.match(prompt, /Memora never posts without creator approval and final confirmation/);
   assert.match(prompt, /No posted reply proof exists/);

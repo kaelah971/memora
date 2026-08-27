@@ -5,6 +5,7 @@ import type { Tables } from "../../lib/supabase/database.types";
 import {
   buildFollowUpOpportunities,
   extractYouTubeVideoId,
+  getFollowUpReplyVariants,
   followUpOpportunityAnchor,
   getCreatorEventYouTubeVideoUrl,
   getFollowUpActionVisibility,
@@ -125,8 +126,8 @@ test("opportunity builder creates a demo fallback opportunity", () => {
   assert.equal(opportunity.creatorEventTitle, "My Beginner Editing Workflow");
   assert.equal(opportunity.creatorEventVideoUrl, null);
   assert.doesNotMatch(opportunity.suggestedReply, /youtube\.com|youtu\.be|watch\?v=/i);
-  assert.match(opportunity.suggestedReply, /make a follow-up .* first/i);
-  assert.match(opportunity.whyNow, /shares editing, software/i);
+  assert.match(opportunity.suggestedReply, /make a simpler beginner walkthrough .* once it's live/i);
+  assert.match(opportunity.whyNow, /create the beginner walkthrough first/i);
 });
 
 test("queue links target the matching follow-up detail anchor", () => {
@@ -149,7 +150,7 @@ test("imported YouTube records are preferred and proof fields are complete", () 
     platform: "youtube",
     source_type: "video",
     title: "Beginner Editing Workflow",
-    url: "https://www.youtube.com/watch?v=abcDEF12345",
+    url: "https://www.youtube.com/watch?v=ZYXwv987654",
     metadata: { youtube_channel_id: "real-channel" },
   });
   const input = dataset({
@@ -157,7 +158,7 @@ test("imported YouTube records are preferred and proof fields are complete", () 
     event: {
       ...dataset().creatorEvents[0],
       source_id: importedEventSource.id,
-      payload: { platform: "youtube", topic: "beginner editing software and workflow", video_id: "abcDEF12345" },
+      payload: { platform: "youtube", topic: "beginner editing software and workflow", video_id: "ZYXwv987654" },
     },
     interaction: {
       ...dataset().interactions[0],
@@ -172,14 +173,238 @@ test("imported YouTube records are preferred and proof fields are complete", () 
   assert.ok(opportunity);
   assert.equal(opportunity.dataOrigin, "real-youtube");
   assert.equal(opportunity.sourceDescription, "A stored source description.");
-  assert.equal(opportunity.creatorEventVideoId, "abcDEF12345");
-  assert.equal(opportunity.creatorEventVideoUrl, "https://www.youtube.com/watch?v=abcDEF12345");
-  assert.match(opportunity.suggestedReply, /abcDEF12345/);
+  assert.equal(opportunity.sourceVideoId, "abcDEF12345");
+  assert.equal(opportunity.creatorEventVideoId, "ZYXwv987654");
+  assert.equal(opportunity.creatorEventVideoUrl, "https://www.youtube.com/watch?v=ZYXwv987654");
+  assert.match(opportunity.suggestedReply, /ZYXwv987654/);
   assert.equal(opportunity.proof.sourceComment, opportunity.commentText);
   assert.ok(opportunity.proof.rememberedContext);
   assert.ok(opportunity.proof.newContent);
   assert.ok(opportunity.proof.followUpReason);
   assert.equal(opportunity.proof.mindsContinuity.available, true);
+});
+
+test("reply variants use only the verified follow-up video or no link", () => {
+  const importedSource = source({
+    platform: "youtube",
+    source_type: "video",
+    url: "https://www.youtube.com/watch?v=abcDEF12345",
+    metadata: { youtube_channel_id: "real-channel", youtube_video_id: "abcDEF12345" },
+  });
+  const importedEventSource = source({
+    id: "source-event-1",
+    platform: "youtube",
+    source_type: "video",
+    url: "https://www.youtube.com/watch?v=ZYXwv987654",
+    metadata: { youtube_channel_id: "real-channel", youtube_video_id: "ZYXwv987654" },
+  });
+  const imported = dataset({
+    source: importedSource,
+    event: {
+      ...dataset().creatorEvents[0],
+      source_id: importedEventSource.id,
+      payload: { platform: "youtube", topic: "beginner editing software and workflow", video_id: "ZYXwv987654" },
+    },
+    interaction: {
+      ...dataset().interactions[0],
+      platform: "youtube",
+      raw_metadata: { comment_id: "real-comment", video_id: "abcDEF12345" },
+    },
+  });
+  imported.sources = [importedSource, importedEventSource];
+  const [withVideo] = buildFollowUpOpportunities(imported);
+  assert.ok(withVideo);
+  const linkedVariants = getFollowUpReplyVariants(withVideo);
+  for (const reply of Object.values(linkedVariants)) {
+    assert.match(reply, /https:\/\/www\.youtube\.com\/watch\?v=ZYXwv987654/);
+    assert.doesNotMatch(reply, /abcDEF12345/);
+  }
+
+  const [withoutVideo] = buildFollowUpOpportunities({ ...dataset(), dataOrigin: "demo-seed-fallback" });
+  assert.ok(withoutVideo);
+  for (const reply of Object.values(getFollowUpReplyVariants(withoutVideo))) {
+    assert.doesNotMatch(reply, /https?:\/\/|youtube\.com|youtu\.be/i);
+  }
+});
+
+test("content-first creator action status is visible until a later video is attached", () => {
+  const input = dataset({
+    action: {
+      id: "content-action-1",
+      creator_id: "creator-1",
+      audience_member_id: "member-1",
+      interaction_id: "interaction-1",
+      creator_event_id: "event-1",
+      action_type: "follow_up",
+      status: "pending",
+      text: null,
+      created_at: "2026-08-25T10:00:00.000Z",
+      completed_at: null,
+      metadata: { follow_up_status: "needs_follow_up_content" },
+    },
+  });
+  const [withoutVideo] = buildFollowUpOpportunities({ ...input, dataOrigin: "demo-seed-fallback" });
+  assert.equal(withoutVideo.status, "needs_follow_up_content");
+
+  const sourceWithVideo = source({
+    id: "source-event-1",
+    platform: "youtube",
+    source_type: "video",
+    url: "https://www.youtube.com/watch?v=ZYXwv987654",
+    metadata: { youtube_channel_id: "real-channel", youtube_video_id: "ZYXwv987654" },
+  });
+  const realSource = source({
+    platform: "youtube",
+    source_type: "video",
+    url: "https://www.youtube.com/watch?v=abcDEF12345",
+    metadata: { youtube_channel_id: "real-channel", youtube_video_id: "abcDEF12345" },
+  });
+  const withVideo = {
+    ...input,
+    sources: [realSource, sourceWithVideo],
+    interactions: [{ ...input.interactions[0], source_id: realSource.id, platform: "youtube" as const, raw_metadata: { comment_id: "real-comment", video_id: "abcDEF12345" } }],
+    creatorEvents: [{ ...input.creatorEvents[0], source_id: sourceWithVideo.id, payload: { video_id: "ZYXwv987654", topic: "beginner editing software" } }],
+  };
+  const [later] = buildFollowUpOpportunities({ ...withVideo, dataOrigin: "real-youtube" });
+  assert.equal(later.status, "needs_review");
+  assert.equal(later.creatorEventVideoId, "ZYXwv987654");
+});
+
+test("the original source video never becomes the follow-up video", () => {
+  const originalVideoId = "abcDEF12345";
+  const importedSource = source({
+    platform: "youtube",
+    source_type: "video",
+    external_id: originalVideoId,
+    url: `https://www.youtube.com/watch?v=${originalVideoId}`,
+    metadata: { youtube_channel_id: "real-channel", youtube_video_id: originalVideoId },
+  });
+  const input = dataset({
+    source: importedSource,
+    interaction: {
+      ...dataset().interactions[0],
+      source_id: importedSource.id,
+      platform: "youtube",
+      raw_metadata: { comment_id: "real-comment", video_id: originalVideoId },
+    },
+    event: {
+      ...dataset().creatorEvents[0],
+      source_id: importedSource.id,
+      external_id: originalVideoId,
+      payload: { platform: "youtube", video_id: originalVideoId, topic: "beginner editing software and workflow" },
+    },
+  });
+  input.sources = [importedSource];
+
+  const [opportunity] = buildFollowUpOpportunities(input);
+
+  assert.ok(opportunity);
+  assert.equal(opportunity.sourceVideoId, originalVideoId);
+  assert.equal(opportunity.creatorEventVideoId, null);
+  assert.equal(opportunity.creatorEventVideoUrl, null);
+  assert.match(opportunity.whyNow, /create the beginner walkthrough first/i);
+  assert.doesNotMatch(opportunity.suggestedReply, new RegExp(originalVideoId));
+});
+
+test("a later separate matching event wins over the original source event", () => {
+  const originalVideoId = "abcDEF12345";
+  const laterVideoId = "ZYXwv987654";
+  const originalSource = source({
+    id: "original-source",
+    platform: "youtube",
+    source_type: "video",
+    external_id: originalVideoId,
+    url: `https://www.youtube.com/watch?v=${originalVideoId}`,
+    metadata: { youtube_channel_id: "real-channel", youtube_video_id: originalVideoId },
+  });
+  const laterSource = source({
+    id: "later-source",
+    platform: "youtube",
+    source_type: "video",
+    external_id: laterVideoId,
+    url: `https://www.youtube.com/watch?v=${laterVideoId}`,
+    metadata: { youtube_channel_id: "real-channel", youtube_video_id: laterVideoId },
+  });
+  const current = dataset({
+    source: originalSource,
+    interaction: {
+      ...dataset().interactions[0],
+      source_id: originalSource.id,
+      platform: "youtube",
+      raw_metadata: { video_id: originalVideoId },
+    },
+    event: {
+      ...dataset().creatorEvents[0],
+      id: "original-event",
+      source_id: originalSource.id,
+      external_id: originalVideoId,
+      payload: { platform: "youtube", video_id: originalVideoId, topic: "beginner editing software and workflow" },
+    },
+  });
+  current.sources = [originalSource, laterSource];
+  current.creatorEvents.push({
+    ...current.creatorEvents[0],
+    id: "later-event",
+    source_id: laterSource.id,
+    external_id: laterVideoId,
+    title: "A simpler beginner editing workflow",
+    payload: { platform: "youtube", video_id: laterVideoId, topic: "beginner editing software and workflow" },
+    occurred_at: "2026-08-24T10:00:00.000Z",
+  });
+
+  const [opportunity] = buildFollowUpOpportunities(current);
+
+  assert.ok(opportunity);
+  assert.equal(opportunity.creatorEventId, "later-event");
+  assert.equal(opportunity.creatorEventVideoId, laterVideoId);
+  assert.equal(opportunity.creatorEventVideoUrl, `https://www.youtube.com/watch?v=${laterVideoId}`);
+  assert.match(opportunity.suggestedReply, new RegExp(laterVideoId));
+  assert.doesNotMatch(opportunity.suggestedReply, new RegExp(originalVideoId));
+  assert.match(opportunity.whyNow, /reply with the follow-up video/i);
+});
+
+test("creator events from another workspace cannot become follow-up matches", () => {
+  const current = dataset();
+  const workspaceSource = source({
+    platform: "youtube",
+    source_type: "video",
+    external_id: "abcDEF12345",
+    url: "https://www.youtube.com/watch?v=abcDEF12345",
+    metadata: { youtube_channel_id: "workspace-channel" },
+    workspace_id: "workspace-1",
+  });
+  const otherWorkspaceSource = source({
+    id: "other-workspace-source",
+    platform: "youtube",
+    source_type: "video",
+    external_id: "ZYXwv987654",
+    url: "https://www.youtube.com/watch?v=ZYXwv987654",
+    metadata: { youtube_channel_id: "workspace-channel" },
+    workspace_id: "workspace-2",
+  });
+  const input = {
+    ...current,
+    workspaceId: "workspace-1",
+    members: current.members.map((member) => ({ ...member, workspace_id: "workspace-1" })),
+    interactions: current.interactions.map((interaction) => ({
+      ...interaction,
+      source_id: workspaceSource.id,
+      platform: "youtube" as const,
+      workspace_id: "workspace-1",
+      raw_metadata: { video_id: "abcDEF12345" },
+    })),
+    sources: [workspaceSource, otherWorkspaceSource],
+    questions: current.questions.map((question) => ({ ...question, workspace_id: "workspace-1" })),
+    creatorEvents: current.creatorEvents.map((event) => ({
+      ...event,
+      source_id: otherWorkspaceSource.id,
+      workspace_id: "workspace-2",
+      payload: { platform: "youtube", video_id: "ZYXwv987654", topic: "editing software" },
+    })),
+    creatorActions: [],
+  };
+
+  assert.deepEqual(buildFollowUpOpportunities(input), []);
 });
 
 test("follow-up video links require a real YouTube video ID from the matching event", () => {
@@ -293,7 +518,7 @@ test("creator voice changes the deterministic draft without changing source fact
   });
 
   assert.ok(opportunity);
-  assert.match(opportunity.suggestedReply, /make a simple follow-up .* first/i);
+  assert.match(opportunity.suggestedReply, /make a simple beginner walkthrough .* once it's live/i);
   assert.doesNotMatch(opportunity.suggestedReply, /example\.com/);
   assert.match(opportunity.commentText, /editing software/i);
 });
@@ -311,11 +536,13 @@ test("approval and dismissal state comes from the latest creator action", () => 
       text: "A draft",
       created_at: "2026-08-24T10:00:00.000Z",
       completed_at: null,
-      metadata: { delivery_status: "not_sent" },
+      metadata: { delivery_status: "not_sent", reply_variant: "short", reply_tone: "short" },
     },
   });
   const [approved] = buildFollowUpOpportunities({ ...input, dataOrigin: "demo-seed-fallback" });
   assert.equal(approved.status, "approved");
+  assert.equal(approved.selectedReplyVariant, "short");
+  assert.equal(approved.selectedReply, "A draft");
   assert.equal(approved.replyStatus, "draft_only");
   assert.doesNotMatch(approved.suggestedReply, /posted|sent/i);
 
@@ -348,7 +575,7 @@ test("persisted unsafe review text never replaces the recomputed safe draft", ()
 
   assert.equal(opportunity.status, "needs_review");
   assert.doesNotMatch(opportunity.suggestedReply, /_IjuW9L6C2A|youtube\.com|watch\?v=/i);
-  assert.match(opportunity.suggestedReply, /make a follow-up .* first/i);
+  assert.match(opportunity.suggestedReply, /make a simpler beginner walkthrough .* once it's live/i);
 });
 
 test("posted reply proof changes the opportunity state without claiming draft-only", () => {

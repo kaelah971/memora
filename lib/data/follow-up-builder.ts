@@ -9,8 +9,9 @@ type CreatorEvent = Tables<"creator_events">;
 type CreatorAction = Tables<"creator_actions">;
 type MindReasoningRow = Tables<"follow_up_mind_reasoning">;
 
-export type FollowUpStatus = "needs_review" | "approved" | "dismissed" | "posted";
+export type FollowUpStatus = "needs_review" | "needs_follow_up_content" | "approved" | "dismissed" | "posted";
 export type FollowUpDataOrigin = "real-youtube" | "real-discord" | "real-multi-source" | "demo-seed-fallback" | "none";
+export type FollowUpReplyVariant = "warm" | "short" | "beginner-friendly";
 
 export interface MindsContinuityReference {
   available: true;
@@ -85,6 +86,7 @@ export interface FollowUpOpportunity {
   commentPublishedAt: string;
   sourceId: string;
   sourceTitle: string;
+  sourceVideoId: string | null;
   sourceDescription: string | null;
   sourceUrl: string | null;
   sourcePlatform: string;
@@ -96,6 +98,8 @@ export interface FollowUpOpportunity {
   creatorEventSourceUrl: string | null;
   creatorEventVideoId: string | null;
   creatorEventVideoUrl: string | null;
+  selectedReplyVariant?: FollowUpReplyVariant | null;
+  selectedReply?: string | null;
   whyNow: string;
   suggestedReply: string;
   confidenceLabel: string;
@@ -107,6 +111,12 @@ export interface FollowUpOpportunity {
   dataOrigin: Exclude<FollowUpDataOrigin, "none">;
   proof: FollowUpProof;
 }
+
+export const FOLLOW_UP_REPLY_VARIANTS: Record<FollowUpReplyVariant, string> = {
+  warm: "Warm",
+  short: "Short",
+  "beginner-friendly": "Beginner-friendly",
+};
 
 export function followUpOpportunityAnchor(opportunityId: string): string {
   return `follow-up-opportunity-${opportunityId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
@@ -139,6 +149,7 @@ export interface FollowUpQueue {
 }
 
 export interface FollowUpBuildInput {
+  workspaceId?: string;
   members: AudienceMember[];
   interactions: Interaction[];
   sources: Source[];
@@ -369,6 +380,51 @@ export function getCreatorEventYouTubeVideoUrl(
   return videoId ? `https://www.youtube.com/watch?v=${videoId}` : null;
 }
 
+export function getInteractionYouTubeVideoId(
+  interaction: Interaction,
+  source: Source | undefined,
+): string | null {
+  if (!isImportedYouTubeInteraction(interaction, source)) return null;
+  const metadata = isRecord(interaction.raw_metadata) ? interaction.raw_metadata : {};
+  const sourceMetadata = isRecord(source?.metadata) ? source.metadata : {};
+  const candidates = [
+    metadata.video_id,
+    metadata.youtube_video_id,
+    sourceMetadata.youtube_video_id,
+    source?.external_id,
+    source?.url,
+  ];
+  return candidates.reduce<string | null>(
+    (videoId, candidate) => videoId ?? extractYouTubeVideoId(typeof candidate === "string" ? candidate : null),
+    null,
+  );
+}
+
+export function getFollowUpYouTubeVideoId(
+  interaction: Interaction,
+  source: Source | undefined,
+  event: CreatorEvent,
+  eventSource: Source | undefined,
+): string | null {
+  const eventVideoId = getCreatorEventYouTubeVideoId(event, eventSource);
+  const sourceVideoId = getInteractionYouTubeVideoId(interaction, source);
+  const eventTime = Date.parse(event.occurred_at);
+  const interactionTime = Date.parse(interaction.published_at);
+  if (!eventVideoId || !Number.isFinite(eventTime) || !Number.isFinite(interactionTime) || eventTime <= interactionTime) return null;
+  if (sourceVideoId && eventVideoId === sourceVideoId) return null;
+  return eventVideoId;
+}
+
+export function getFollowUpYouTubeVideoUrl(
+  interaction: Interaction,
+  source: Source | undefined,
+  event: CreatorEvent,
+  eventSource: Source | undefined,
+): string | null {
+  const videoId = getFollowUpYouTubeVideoId(interaction, source, event, eventSource);
+  return videoId ? `https://www.youtube.com/watch?v=${videoId}` : null;
+}
+
 function draftLinksAreSafe(draft: string | null | undefined, trustedVideoUrl: string | null): boolean {
   if (!draft) return false;
   const links = draft.match(URL_PATTERN) ?? [];
@@ -379,9 +435,71 @@ function draftLinksAreSafe(draft: string | null | undefined, trustedVideoUrl: st
   });
 }
 
+function safeReplyText(draft: string | null | undefined, trustedVideoUrl: string | null): string | null {
+  const value = draft?.trim();
+  return value && draftLinksAreSafe(value, trustedVideoUrl) ? value : null;
+}
+
+export function isFollowUpReplyVariant(value: unknown): value is FollowUpReplyVariant {
+  return value === "warm" || value === "short" || value === "beginner-friendly";
+}
+
+function selectedReplyVariantFromAction(action: CreatorAction | undefined): FollowUpReplyVariant | null {
+  if (!action || !isRecord(action.metadata)) return null;
+  const value = action.metadata.reply_variant ?? action.metadata.selected_reply_variant;
+  return isFollowUpReplyVariant(value) ? value : null;
+}
+
+function fallbackReplyVariant(
+  variant: FollowUpReplyVariant,
+  opportunity: FollowUpOpportunity,
+): string {
+  const memberName = opportunity.audienceMemberName.replace(/https?:\/\/[^\s<>"')]+/gi, "").trim() || "there";
+  const commentText = opportunity.commentText.replace(/https?:\/\/[^\s<>"')]+/gi, "").trim() || "your question";
+  const title = opportunity.creatorEventTitle.replace(/https?:\/\/[^\s<>"')]+/gi, "").trim() || "this new content";
+  if (variant === "warm") {
+    const deterministicReply = safeReplyText(opportunity.suggestedReply, opportunity.creatorEventVideoUrl);
+    if (deterministicReply) return deterministicReply;
+  }
+  if (opportunity.creatorEventVideoUrl) {
+    return variant === "short"
+      ? `Thanks for asking, ${memberName}. This follow-up covers it: ${title} - ${opportunity.creatorEventVideoUrl}`
+      : `Hi ${memberName}, here's a beginner-friendly follow-up to “${commentText}”: ${title} - ${opportunity.creatorEventVideoUrl}`;
+  }
+  return variant === "short"
+    ? `Thanks for the question, ${memberName}. I'll share a beginner walkthrough here once it's live.`
+    : `Hi ${memberName}, I'll make a beginner-friendly walkthrough for “${commentText}” and share it here once it's live.`;
+}
+
+export function getFollowUpReplyVariants(
+  opportunity: FollowUpOpportunity,
+): Record<FollowUpReplyVariant, string> {
+  const mindVariants = opportunity.mindReasoning?.variants;
+  return {
+    warm: safeReplyText(mindVariants?.warm, opportunity.creatorEventVideoUrl) ?? fallbackReplyVariant("warm", opportunity),
+    short: safeReplyText(mindVariants?.short, opportunity.creatorEventVideoUrl) ?? fallbackReplyVariant("short", opportunity),
+    "beginner-friendly": safeReplyText(mindVariants?.beginnerFriendly, opportunity.creatorEventVideoUrl) ?? fallbackReplyVariant("beginner-friendly", opportunity),
+  };
+}
+
 function sourceDescription(source: Source | undefined): string | null {
   if (!source || !isRecord(source.metadata)) return null;
   return stringMetadata(source.metadata.description) ?? stringMetadata(source.metadata.video_description);
+}
+
+function scopeFollowUpInput(input: FollowUpBuildInput): FollowUpBuildInput {
+  if (!input.workspaceId) return input;
+  const belongsToWorkspace = (row: { workspace_id?: string }): boolean => !row.workspace_id || row.workspace_id === input.workspaceId;
+  return {
+    ...input,
+    members: input.members.filter(belongsToWorkspace),
+    interactions: input.interactions.filter(belongsToWorkspace),
+    sources: input.sources.filter(belongsToWorkspace),
+    questions: input.questions.filter(belongsToWorkspace),
+    creatorEvents: input.creatorEvents.filter(belongsToWorkspace),
+    creatorActions: input.creatorActions.filter(belongsToWorkspace),
+    mindReasoning: input.mindReasoning?.filter(belongsToWorkspace),
+  };
 }
 
 function mindReasoningFromRow(row: MindReasoningRow): FollowUpMindReasoning {
@@ -452,12 +570,16 @@ function statusForAction(
   postedRepliesByKey: Map<string, PostedReplyProof>,
   interactionId: string,
   creatorEventId: string,
+  hasFollowUpVideo: boolean,
 ): FollowUpStatus {
   const key = actionKey(interactionId, creatorEventId);
   if (postedRepliesByKey.has(key)) return "posted";
   const action = actionsByKey.get(key);
   if (!action) return "needs_review";
   if (action.action_type === "dismiss" || action.status === "dismissed") return "dismissed";
+  if (isRecord(action.metadata) && action.metadata.follow_up_status === "needs_follow_up_content") {
+    return hasFollowUpVideo ? "needs_review" : "needs_follow_up_content";
+  }
   if (action.status === "approved") return "approved";
   return "needs_review";
 }
@@ -475,16 +597,26 @@ function suggestedReplyForVoice(
   const destination = eventUrl ? ` ${eventUrl}` : "";
   switch (voice) {
     case "direct":
-      return `${safeMemberName}, you asked “${safeCommentText}” and ${eventUrl ? `this new content answers it: ${safeEventTitle}.${destination}` : `I'm going to make a follow-up on ${safeEventTitle} first.`}`;
+      return eventUrl
+        ? `${safeMemberName}, you asked “${safeCommentText}” and this new content answers it: ${safeEventTitle}.${destination}`
+        : `${safeMemberName}, great question. I'll make a simpler beginner walkthrough and share it here once it's live.`;
     case "beginner-friendly":
-      return `Hi ${safeMemberName}, you asked “${safeCommentText}”. ${eventUrl ? `This is a simple place to start: ${safeEventTitle}.${destination}` : `I'm going to make a simple follow-up on ${safeEventTitle} first.`}`;
+      return eventUrl
+        ? `Hi ${safeMemberName}, you asked “${safeCommentText}”. This is a simple place to start: ${safeEventTitle}.${destination}`
+        : `Hi ${safeMemberName}, great question. I'll make a simple beginner walkthrough and share it here once it's live.`;
     case "professional":
-      return `Hi ${safeMemberName}, following up on your question: “${safeCommentText}”. ${eventUrl ? `This new content may be useful: ${safeEventTitle}.${destination}` : `I'm going to make a useful follow-up on ${safeEventTitle} first.`}`;
+      return eventUrl
+        ? `Hi ${safeMemberName}, following up on your question: “${safeCommentText}”. This new content may be useful: ${safeEventTitle}.${destination}`
+        : `Hi ${safeMemberName}, thanks for the question. I'll make a focused beginner walkthrough and share it here once it's live.`;
     case "playful":
-      return `Hey ${safeMemberName}, circling back to your “${safeCommentText}” question. ${eventUrl ? `This new content might be just the thing: ${safeEventTitle}.${destination}` : `I may make a follow-up on ${safeEventTitle} first.`}`;
+      return eventUrl
+        ? `Hey ${safeMemberName}, circling back to your “${safeCommentText}” question. This new content might be just the thing: ${safeEventTitle}.${destination}`
+        : `Hey ${safeMemberName}, great question. I'll make a beginner walkthrough and share it here once it's live.`;
     case "warm":
     default:
-      return `Hey ${safeMemberName}, you asked “${safeCommentText}” and ${eventUrl ? `I thought this new video might help: ${safeEventTitle} - ${eventUrl}` : `I'm going to make a follow-up on ${safeEventTitle} first.`}`;
+      return eventUrl
+        ? `Hey ${safeMemberName}, you asked “${safeCommentText}” and I thought this new video might help: ${safeEventTitle} - ${eventUrl}`
+        : `Hey ${safeMemberName}, great question. I'll make a simpler beginner walkthrough and share it here once it's live.`;
   }
 }
 
@@ -526,10 +658,11 @@ function chooseDataRows(input: FollowUpBuildInput): {
 }
 
 export function buildFollowUpOpportunities(input: FollowUpBuildInput): FollowUpOpportunity[] {
-  const sourcesById = new Map(input.sources.map((source) => [source.id, source]));
-  const membersById = new Map(input.members.map((member) => [member.id, member]));
+  const scopedInput = scopeFollowUpInput(input);
+  const sourcesById = new Map(scopedInput.sources.map((source) => [source.id, source]));
+  const membersById = new Map(scopedInput.members.map((member) => [member.id, member]));
   const questionsByInteraction = new Map(
-    input.questions
+    scopedInput.questions
       .filter((question) => question.status === "open")
       .map((question) => [question.interaction_id, question]),
   );
@@ -537,7 +670,7 @@ export function buildFollowUpOpportunities(input: FollowUpBuildInput): FollowUpO
   const postedRepliesByKey = new Map<string, PostedReplyProof>();
   const preferredEventByInteraction = new Map<string, string>();
   const mindReasoningByOpportunity = new Map<string, FollowUpMindReasoning>();
-  for (const action of [...input.creatorActions].sort((left, right) => right.created_at.localeCompare(left.created_at))) {
+  for (const action of [...scopedInput.creatorActions].sort((left, right) => right.created_at.localeCompare(left.created_at))) {
     if (!action.interaction_id || !action.creator_event_id) continue;
     const key = actionKey(action.interaction_id, action.creator_event_id);
     if (!actionsByKey.has(key)) actionsByKey.set(key, action);
@@ -547,14 +680,14 @@ export function buildFollowUpOpportunities(input: FollowUpBuildInput): FollowUpO
       preferredEventByInteraction.set(action.interaction_id, action.creator_event_id);
     }
   }
-  for (const row of [...(input.mindReasoning ?? [])].sort((left, right) => right.updated_at.localeCompare(left.updated_at))) {
+  for (const row of [...(scopedInput.mindReasoning ?? [])].sort((left, right) => right.updated_at.localeCompare(left.updated_at))) {
     if (!mindReasoningByOpportunity.has(row.opportunity_id)) {
       mindReasoningByOpportunity.set(row.opportunity_id, mindReasoningFromRow(row));
     }
   }
 
-  const selected = chooseDataRows(input);
-  const dataOrigin = input.dataOrigin ?? selected.dataOrigin;
+  const selected = chooseDataRows(scopedInput);
+  const dataOrigin = scopedInput.dataOrigin ?? selected.dataOrigin;
   const opportunities: FollowUpOpportunity[] = [];
 
   for (const interaction of selected.interactions) {
@@ -566,13 +699,18 @@ export function buildFollowUpOpportunities(input: FollowUpBuildInput): FollowUpO
 
     const commentTerms = new Set(tokenize(interaction.text));
     const commentChannelId = sourceChannelId(source);
+    const sourceVideoId = getInteractionYouTubeVideoId(interaction, source);
     const preferredEventId = preferredEventByInteraction.get(interaction.id);
     const matchingEvents = selected.creatorEvents
       .map((event) => {
         const eventSource = event.source_id ? sourcesById.get(event.source_id) : undefined;
         const sameSource = event.source_id === interaction.source_id;
         const sameChannel = Boolean(commentChannelId && commentChannelId === sourceChannelId(eventSource));
-        const persistedActionMatch = event.id === preferredEventId;
+        const eventVideoId = getCreatorEventYouTubeVideoId(event, eventSource);
+        const sameVideoAsSource = Boolean(sourceVideoId && eventVideoId && sourceVideoId === eventVideoId);
+        const followUpVideoId = getFollowUpYouTubeVideoId(interaction, source, event, eventSource);
+        const followUpVideoUrl = followUpVideoId ? `https://www.youtube.com/watch?v=${followUpVideoId}` : null;
+        const persistedActionMatch = event.id === preferredEventId && !sameVideoAsSource;
         const eventTime = Date.parse(event.occurred_at);
         const interactionTime = Date.parse(interaction.published_at);
         if (
@@ -590,10 +728,11 @@ export function buildFollowUpOpportunities(input: FollowUpBuildInput): FollowUpO
         const score =
           matchedTerms.length * 2 +
           (question ? 3 : 1) +
-          (sameSource ? 3 : 0) +
-          (sameChannel ? 2 : 0) +
+          (sameSource && !sameVideoAsSource ? 3 : 0) +
+          (sameChannel && !sameVideoAsSource ? 2 : 0) +
+          (followUpVideoId ? 20 : 0) +
           (persistedActionMatch ? 100 : 0);
-        return { event, eventSource, matchedTerms, sameSource, sameChannel, score };
+        return { event, eventSource, matchedTerms, sameSource, sameChannel, sameVideoAsSource, followUpVideoId, followUpVideoUrl, score };
       })
       .filter((candidate): candidate is NonNullable<typeof candidate> => candidate !== null)
       .sort((left, right) => right.score - left.score || right.event.occurred_at.localeCompare(left.event.occurred_at));
@@ -603,28 +742,36 @@ export function buildFollowUpOpportunities(input: FollowUpBuildInput): FollowUpO
 
     const readableTerms = match.matchedTerms.slice(0, 3).join(", ") || "the same source context";
     const questionState = question ? "open question" : "question";
-    const whyNow = match.sameSource
-      ? `This imported creator event is connected to the same source and gives ${member.display_name}'s ${questionState} a concrete follow-up context.`
-      : `The new content shares ${readableTerms} with ${member.display_name}'s ${questionState} and arrived after the original comment, giving you a timely reason to reconnect.`;
+    const whyNow = match.followUpVideoUrl
+      ? `A later creator event shares ${readableTerms} with ${member.display_name}'s ${questionState}. Reply with the follow-up video.`
+      : `No later matching creator video is attached yet for ${member.display_name}'s ${questionState}. Create the beginner walkthrough first.`;
     const rememberedContext = `${member.display_name} asked: “${interaction.text}”${question ? " This question is still open." : ""}`;
     const newContent = `${match.event.title}${match.event.description ? `: ${match.event.description}` : ""}`;
-    const creatorVoice = normalizeCreatorVoice(input.creatorVoice ?? DEFAULT_CREATOR_VOICE);
+    const creatorVoice = normalizeCreatorVoice(scopedInput.creatorVoice ?? DEFAULT_CREATOR_VOICE);
     const suggestedReply = suggestedReplyForVoice(
       creatorVoice,
       member.display_name,
       interaction.text,
       match.event.title,
-      getCreatorEventYouTubeVideoUrl(match.event, match.eventSource),
+      match.followUpVideoUrl,
     );
     const currentAction = actionsByKey.get(actionKey(interaction.id, match.event.id));
-    const calculatedStatus = statusForAction(actionsByKey, postedRepliesByKey, interaction.id, match.event.id);
-    const status = calculatedStatus === "approved" && !draftLinksAreSafe(currentAction?.text, getCreatorEventYouTubeVideoUrl(match.event, match.eventSource))
-      ? "needs_review"
-      : calculatedStatus;
+     const calculatedStatus = statusForAction(actionsByKey, postedRepliesByKey, interaction.id, match.event.id, Boolean(match.followUpVideoUrl));
+     const status = calculatedStatus === "approved" && !draftLinksAreSafe(currentAction?.text, match.followUpVideoUrl)
+       ? "needs_review"
+       : calculatedStatus;
+     const selectedReplyVariant = selectedReplyVariantFromAction(currentAction);
+     const selectedReply = currentAction?.status === "approved"
+       ? safeReplyText(currentAction.text, match.followUpVideoUrl)
+       : null;
     const confidenceLabel = question && match.matchedTerms.length >= 2
-      ? "Strong evidence: open question plus shared topic"
+      ? match.followUpVideoUrl
+        ? "Strong evidence: open question plus later shared topic"
+        : "Question matched, but no later follow-up video is attached"
       : match.sameSource
-        ? "Strong evidence: same source plus question"
+        ? match.sameVideoAsSource
+          ? "Original source video only; no later follow-up attached"
+          : "Strong evidence: same source plus question"
         : `Clear evidence: shared topic (${readableTerms})`;
 
     opportunities.push({
@@ -634,9 +781,10 @@ export function buildFollowUpOpportunities(input: FollowUpBuildInput): FollowUpO
       interactionId: interaction.id,
       commentText: interaction.text,
       commentPublishedAt: interaction.published_at,
-      sourceId: source.id,
-      sourceTitle: source.title,
-      sourceDescription: sourceDescription(source),
+       sourceId: source.id,
+       sourceTitle: source.title,
+       sourceVideoId,
+       sourceDescription: sourceDescription(source),
       sourceUrl: source.url,
       sourcePlatform: source.platform,
       creatorEventId: match.event.id,
@@ -645,16 +793,18 @@ export function buildFollowUpOpportunities(input: FollowUpBuildInput): FollowUpO
       creatorEventOccurredAt: match.event.occurred_at,
       creatorEventSourceTitle: match.eventSource?.title ?? null,
       creatorEventSourceUrl: match.eventSource?.url ?? null,
-      creatorEventVideoId: getCreatorEventYouTubeVideoId(match.event, match.eventSource),
-      creatorEventVideoUrl: getCreatorEventYouTubeVideoUrl(match.event, match.eventSource),
+       creatorEventVideoId: match.followUpVideoId,
+       creatorEventVideoUrl: match.followUpVideoUrl,
+       selectedReplyVariant,
+       selectedReply,
       whyNow,
       suggestedReply,
       confidenceLabel,
        status,
        replyStatus: postedRepliesByKey.has(actionKey(interaction.id, match.event.id)) ? "posted" : "draft_only",
        postedReply: postedRepliesByKey.get(actionKey(interaction.id, match.event.id)) ?? null,
-       mindReasoning: mindReasoningByOpportunity.get(`follow-up:${interaction.id}:${match.event.id}`) ?? null,
-       onboardingContext: onboardingContextForMember(member.id, input.interactions),
+        mindReasoning: mindReasoningByOpportunity.get(`follow-up:${interaction.id}:${match.event.id}`) ?? null,
+        onboardingContext: onboardingContextForMember(member.id, scopedInput.interactions),
        dataOrigin,
       proof: {
         sourceComment: interaction.text,

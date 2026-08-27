@@ -4,6 +4,7 @@ import { FollowUpQueue } from "@/components/memora/follow-up-queue";
 import { ProductEmptyState } from "@/components/memora/product-empty-state";
 import { getCreatorWorkspace } from "@/lib/data/creators";
 import { listFollowUpOpportunities } from "@/lib/data/follow-up-opportunities";
+import { getYouTubeConnection } from "@/lib/youtube/storage";
 import { getCurrentWorkspaceSelection } from "@/lib/workspaces/access";
 import { workspaceBasePath } from "@/lib/workspaces/entry";
 
@@ -16,6 +17,9 @@ export default async function FollowUpPage() {
   const queueResult = creatorResult.data
     ? await listFollowUpOpportunities(creatorResult.data.id)
     : null;
+  const postingEnabled = creatorResult.data
+    ? Boolean(await getYouTubeConnection(creatorResult.data.id).catch(() => null))
+    : false;
 
   return (
     <AppScreen
@@ -70,7 +74,7 @@ export default async function FollowUpPage() {
           </div>
 
           {queueResult.data.opportunities.length > 0 ? (
-            <FollowUpQueue opportunities={queueResult.data.opportunities} />
+             <FollowUpQueue opportunities={queueResult.data.opportunities} postingEnabled={postingEnabled} />
           ) : (
             <ProductEmptyState
               eyebrow={queueResult.data.dataOrigin === "none" ? "NO OPPORTUNITIES YET" : "NO CLEAR MATCHES"}

@@ -4,11 +4,18 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 import {
+  markFollowUpNeedsContent,
   reviewFollowUpOpportunity,
   type FollowUpReviewAction,
 } from "@/app/app/follow-up/actions";
 import { StateSticker } from "@/components/memora/state-sticker";
-import { followUpOpportunityAnchor, getFollowUpActionVisibility } from "@/lib/data/follow-up-builder";
+import {
+  FOLLOW_UP_REPLY_VARIANTS,
+  followUpOpportunityAnchor,
+  getFollowUpActionVisibility,
+  getFollowUpReplyVariants,
+  type FollowUpReplyVariant,
+} from "@/lib/data/follow-up-builder";
 import type {
   FollowUpOpportunity,
   FollowUpStatus,
@@ -18,6 +25,7 @@ import type {
 
 interface FollowUpQueueProps {
   opportunities: FollowUpOpportunity[];
+  postingEnabled: boolean;
 }
 
 function formatDate(value: string): string {
@@ -25,11 +33,19 @@ function formatDate(value: string): string {
 }
 
 function statusLabel(status: FollowUpStatus): string {
-  return status === "approved" ? "APPROVED" : status === "dismissed" ? "DISMISSED" : status === "posted" ? "POSTED TO YOUTUBE" : "NEEDS REVIEW";
+  return status === "approved"
+    ? "APPROVED"
+    : status === "dismissed"
+      ? "DISMISSED"
+      : status === "posted"
+        ? "POSTED TO YOUTUBE"
+        : status === "needs_follow_up_content"
+          ? "CONTENT TO CREATE"
+          : "NEEDS REVIEW";
 }
 
 function statusTone(status: FollowUpStatus): "approved" | "remembered" | "open" | "complete" {
-  return status === "approved" ? "approved" : status === "dismissed" ? "remembered" : status === "posted" ? "complete" : "open";
+  return status === "approved" ? "approved" : status === "dismissed" || status === "needs_follow_up_content" ? "remembered" : status === "posted" ? "complete" : "open";
 }
 
 function dataOriginLabel(origin: FollowUpOpportunity["dataOrigin"]): string {
@@ -51,12 +67,13 @@ function proofRow(label: string, value: string) {
   );
 }
 
-function FollowUpCard({ opportunity }: { opportunity: FollowUpOpportunity }) {
+function FollowUpCard({ opportunity, postingEnabled }: { opportunity: FollowUpOpportunity; postingEnabled: boolean }) {
   const router = useRouter();
   const [status, setStatus] = useState<FollowUpStatus>(opportunity.status);
   const [postedReply, setPostedReply] = useState<PostedReplyProof | null>(opportunity.postedReply);
   const [isPending, startTransition] = useTransition();
   const [isPostPending, startPostTransition] = useTransition();
+  const [isContentPending, startContentTransition] = useTransition();
   const [isMindPending, startMindTransition] = useTransition();
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
   const [confirmPost, setConfirmPost] = useState(false);
@@ -64,8 +81,23 @@ function FollowUpCard({ opportunity }: { opportunity: FollowUpOpportunity }) {
   const [postError, setPostError] = useState<string | null>(null);
   const [mindReasoning, setMindReasoning] = useState<FollowUpMindReasoning | null>(opportunity.mindReasoning);
   const [mindError, setMindError] = useState<string | null>(null);
+  const replyVariants = getFollowUpReplyVariants({ ...opportunity, mindReasoning });
+  const [selectedReplyVariant, setSelectedReplyVariant] = useState<FollowUpReplyVariant>(opportunity.selectedReplyVariant ?? "warm");
+  const selectedReply = opportunity.selectedReplyVariant === null && selectedReplyVariant === "warm" && opportunity.selectedReply
+    ? opportunity.selectedReply
+    : replyVariants[selectedReplyVariant];
+  const canPost = postingEnabled && opportunity.sourcePlatform === "youtube" && Boolean(opportunity.sourceVideoId);
   const actionVisibility = getFollowUpActionVisibility(status, Boolean(postedReply));
   const mindAdvisory = mindReasoning?.variants.advisory;
+
+  function chooseReplyVariant(variant: FollowUpReplyVariant): void {
+    setSelectedReplyVariant(variant);
+    setCopyState("idle");
+    setConfirmPost(false);
+    if (status === "approved" && variant !== opportunity.selectedReplyVariant) {
+      setStatus("needs_review");
+    }
+  }
 
   function review(action: FollowUpReviewAction): void {
     setError(null);
@@ -74,9 +106,10 @@ function FollowUpCard({ opportunity }: { opportunity: FollowUpOpportunity }) {
         action,
         opportunityId: opportunity.id,
         interactionId: opportunity.interactionId,
-        creatorEventId: opportunity.creatorEventId,
-        audienceMemberId: opportunity.audienceMemberId,
-        draft: opportunity.suggestedReply,
+         creatorEventId: opportunity.creatorEventId,
+         audienceMemberId: opportunity.audienceMemberId,
+         draft: selectedReply,
+         replyVariant: selectedReplyVariant,
       });
       if (!result.ok || !result.status) {
         setError(result.error ?? "The review action could not be saved.");
@@ -87,9 +120,27 @@ function FollowUpCard({ opportunity }: { opportunity: FollowUpOpportunity }) {
     });
   }
 
+  function markContentToCreate(): void {
+    setError(null);
+    startContentTransition(async () => {
+      const result = await markFollowUpNeedsContent({
+        opportunityId: opportunity.id,
+        interactionId: opportunity.interactionId,
+        creatorEventId: opportunity.creatorEventId,
+        audienceMemberId: opportunity.audienceMemberId,
+      });
+      if (!result.ok || !result.status) {
+        setError(result.error ?? "The content planning status could not be saved.");
+        return;
+      }
+      setStatus(result.status);
+      router.refresh();
+    });
+  }
+
   async function copyDraft(): Promise<void> {
     try {
-      await navigator.clipboard.writeText(opportunity.suggestedReply);
+      await navigator.clipboard.writeText(selectedReply);
       setCopyState("copied");
     } catch {
       setCopyState("failed");
@@ -124,7 +175,7 @@ function FollowUpCard({ opportunity }: { opportunity: FollowUpOpportunity }) {
         const response = await fetch("/api/youtube/post-reply", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ opportunityId: opportunity.id, replyText: opportunity.suggestedReply }),
+           body: JSON.stringify({ opportunityId: opportunity.id, replyText: selectedReply }),
         });
         const result = (await response.json()) as { posted?: boolean; proof?: PostedReplyProof; error?: string };
         if (!response.ok || !result.posted || !result.proof) {
@@ -203,7 +254,7 @@ function FollowUpCard({ opportunity }: { opportunity: FollowUpOpportunity }) {
                </div>
                <div className="follow-up-card__mind-advisory-item">
                  <span className="data-label">RECOMMENDED ACTION</span>
-                 <p>{mindAdvisory.recommendedAction ?? "Review the draft and decide whether to reply now or make follow-up content."}</p>
+                 <p>{opportunity.creatorEventVideoUrl ? "Reply with the follow-up video." : "Create the beginner walkthrough first."}</p>
                </div>
                <div className="follow-up-card__mind-advisory-item follow-up-card__mind-advisory-item--wide">
                  <span className="data-label">REPLY NOW DRAFT</span>
@@ -216,7 +267,7 @@ function FollowUpCard({ opportunity }: { opportunity: FollowUpOpportunity }) {
                </div>
                <div className="follow-up-card__mind-advisory-item follow-up-card__mind-advisory-item--wide">
                  <span className="data-label">ATTACHED VIDEO STATUS</span>
-                 <p>{mindAdvisory.attachedVideoStatus ?? (opportunity.creatorEventVideoUrl ? "A verified matching creator video is attached." : "No follow-up video attached yet.")}</p>
+                 <p>{opportunity.creatorEventVideoUrl ? "Follow-up video attached" : "No follow-up video attached yet."}</p>
                  {opportunity.creatorEventVideoUrl ? (
                    <a
                      className="follow-up-card__mind-advisory-link"
@@ -238,14 +289,6 @@ function FollowUpCard({ opportunity }: { opportunity: FollowUpOpportunity }) {
             <span className="data-label">SUGGESTED TONE</span>
             <strong>{mindReasoning.tone}</strong>
           </div>
-          {mindReasoning.variants.warm || mindReasoning.variants.short || mindReasoning.variants.beginnerFriendly ? (
-            <div className="follow-up-card__mind-variants">
-              <span className="data-label">OPTIONAL REPLY VARIANTS / NOT POSTED</span>
-              {mindReasoning.variants.warm ? <div><strong>WARM</strong><p>{mindReasoning.variants.warm}</p></div> : null}
-              {mindReasoning.variants.short ? <div><strong>SHORT</strong><p>{mindReasoning.variants.short}</p></div> : null}
-              {mindReasoning.variants.beginnerFriendly ? <div><strong>BEGINNER-FRIENDLY</strong><p>{mindReasoning.variants.beginnerFriendly}</p></div> : null}
-            </div>
-          ) : null}
           <span className="data-label">CONVERSATION / {mindReasoning.conversationId} / UPDATED {formatDate(mindReasoning.updatedAt)}</span>
         </section>
       ) : null}
@@ -274,7 +317,33 @@ function FollowUpCard({ opportunity }: { opportunity: FollowUpOpportunity }) {
             </div>
             <span className="data-label">DRAFT ONLY / NOT SENT</span>
           </div>
-           <p className="follow-up-card__draft-copy">{opportunity.suggestedReply}</p>
+            <fieldset className="follow-up-card__reply-variants">
+              <legend className="section-label">CHOOSE A REPLY VARIANT</legend>
+              {(Object.keys(FOLLOW_UP_REPLY_VARIANTS) as FollowUpReplyVariant[]).map((variant) => (
+                <div className={`follow-up-card__reply-variant${selectedReplyVariant === variant ? " follow-up-card__reply-variant--selected" : ""}`} key={variant}>
+                  <label>
+                    <input
+                      type="radio"
+                      name={`${opportunity.id}-reply-variant`}
+                      value={variant}
+                      checked={selectedReplyVariant === variant}
+                      onChange={() => chooseReplyVariant(variant)}
+                    />
+                    <span>
+                      <strong>{FOLLOW_UP_REPLY_VARIANTS[variant]}</strong>
+                      <span>{replyVariants[variant]}</span>
+                    </span>
+                  </label>
+                  <button className="secondary-button" type="button" onClick={() => chooseReplyVariant(variant)}>
+                    USE THIS REPLY
+                  </button>
+                </div>
+              ))}
+            </fieldset>
+            <div className="follow-up-card__selected-reply" aria-live="polite">
+              <span className="data-label">SELECTED REPLY / {FOLLOW_UP_REPLY_VARIANTS[selectedReplyVariant]}</span>
+              <p className="follow-up-card__draft-copy">{selectedReply}</p>
+            </div>
            <div className="follow-up-card__draft-video-status">
              <span className="data-label">FOLLOW-UP VIDEO STATUS</span>
              {opportunity.creatorEventVideoUrl ? (
@@ -292,18 +361,18 @@ function FollowUpCard({ opportunity }: { opportunity: FollowUpOpportunity }) {
            <div className="follow-up-card__draft-footer">
             <span className="follow-up-card__confidence">{opportunity.confidenceLabel}</span>
             <button className="secondary-button" type="button" onClick={copyDraft}>
-              {copyState === "copied" ? "COPIED DRAFT" : copyState === "failed" ? "COPY UNAVAILABLE" : "COPY SUGGESTED REPLY"}
+               {copyState === "copied" ? "COPIED REPLY" : copyState === "failed" ? "COPY UNAVAILABLE" : "COPY SELECTED REPLY"}
             </button>
           </div>
         </section>
       )}
 
-      {confirmPost && actionVisibility.showPost ? (
+       {confirmPost && actionVisibility.showPost && canPost ? (
         <section className="follow-up-card__post-confirmation" aria-labelledby={`${opportunity.id}-post-confirm-title`}>
           <span className="section-label">FINAL CONFIRMATION</span>
           <h4 id={`${opportunity.id}-post-confirm-title`}>This will publicly reply on YouTube.</h4>
           <p>Memora will not post again unless you approve another reply.</p>
-          <blockquote>{opportunity.suggestedReply}</blockquote>
+           <blockquote>{selectedReply}</blockquote>
           {postError ? <p className="follow-up-card__error" role="alert">{postError}</p> : null}
           <div className="follow-up-card__action-buttons">
             <button className="secondary-button" type="button" disabled={isPostPending} onClick={() => setConfirmPost(false)}>CANCEL</button>
@@ -341,8 +410,10 @@ function FollowUpCard({ opportunity }: { opportunity: FollowUpOpportunity }) {
           <span className="data-label">
             {actionVisibility.showPostedProof
               ? "PROOF SAVED AFTER API SUCCESS"
-              : status === "approved"
-                ? "CREATOR APPROVAL SAVED"
+                 : status === "approved"
+                 ? "CREATOR APPROVAL SAVED"
+                 : status === "needs_follow_up_content"
+                   ? "FOLLOW-UP CONTENT TO CREATE"
                 : status === "dismissed"
                   ? "NO POSTING APPROVED"
                   : "CREATOR APPROVAL REQUIRED"}
@@ -350,32 +421,37 @@ function FollowUpCard({ opportunity }: { opportunity: FollowUpOpportunity }) {
           {error ? <p className="follow-up-card__error" role="alert">{error}</p> : null}
           {postError && !confirmPost ? <p className="follow-up-card__error" role="alert">{postError}</p> : null}
           {mindError ? <p className="follow-up-card__error" role="alert">{mindError}</p> : null}
-          <p className="follow-up-card__mind-status" role="status" aria-live="polite">{isMindPending ? "Asking Memora Mind…" : ""}</p>
+             <p className="follow-up-card__mind-status" role="status" aria-live="polite">{isMindPending ? "Asking Memora Mind…" : ""}</p>
         </div>
-        <div className="follow-up-card__action-buttons">
+         <div className="follow-up-card__action-buttons">
           <div className="follow-up-card__mind-action">
              <p id={`${opportunity.id}-mind-helper`} className="follow-up-card__mind-helper">Ask the persistent Mind what this fan needs, whether to reply now, and what follow-up content to make. Nothing is posted automatically.</p>
             <button className="secondary-button" type="button" aria-describedby={`${opportunity.id}-mind-helper`} disabled={isMindPending || isPostPending} onClick={askMind}>
               {isMindPending ? "ASKING MEMORA MIND…" : mindReasoning ? "REFRESH MIND REASONING" : "ASK MEMORA MIND"}
             </button>
           </div>
-          {!actionVisibility.showPostedProof ? (
-            <>
-            {actionVisibility.showPost ? (
-              <button className="secondary-button" type="button" disabled={isPostPending} onClick={() => { setPostError(null); setConfirmPost(true); }}>
-                POST REPLY TO YOUTUBE
-              </button>
-            ) : null}
-            {actionVisibility.showDismiss ? (
-              <button className="secondary-button" type="button" disabled={isPending || isPostPending} onClick={() => review("dismiss")}>
-                {isPending ? "SAVING..." : "DISMISS"}
-              </button>
-            ) : null}
-            {actionVisibility.showApprove ? (
-              <button className="primary-button" type="button" disabled={isPending || isPostPending} onClick={() => review("approve")}>
-                {isPending ? "SAVING..." : "APPROVE"}
-              </button>
-            ) : null}
+           {!actionVisibility.showPostedProof ? (
+             <>
+             {actionVisibility.showPost && canPost ? (
+               <button className="secondary-button" type="button" disabled={isPostPending || isContentPending} onClick={() => { setPostError(null); setConfirmPost(true); }}>
+                 APPROVE &amp; SEND TO YOUTUBE
+               </button>
+             ) : null}
+             {status === "needs_review" && !opportunity.creatorEventVideoUrl ? (
+               <button className="secondary-button" type="button" disabled={isPending || isContentPending || isPostPending} onClick={markContentToCreate}>
+                 {isContentPending ? "SAVING..." : "MARK AS NEEDS FOLLOW-UP CONTENT"}
+               </button>
+             ) : null}
+             {actionVisibility.showDismiss ? (
+               <button className="secondary-button" type="button" disabled={isPending || isContentPending || isPostPending} onClick={() => review("dismiss")}>
+                 {isPending ? "SAVING..." : "DISMISS"}
+               </button>
+             ) : null}
+             {actionVisibility.showApprove ? (
+               <button className="primary-button" type="button" disabled={isPending || isContentPending || isPostPending} onClick={() => review("approve")}>
+                 {isPending ? "SAVING..." : "APPROVE SELECTED REPLY"}
+               </button>
+             ) : null}
             </>
           ) : null}
         </div>
@@ -384,10 +460,10 @@ function FollowUpCard({ opportunity }: { opportunity: FollowUpOpportunity }) {
   );
 }
 
-export function FollowUpQueue({ opportunities }: FollowUpQueueProps) {
+export function FollowUpQueue({ opportunities, postingEnabled }: FollowUpQueueProps) {
   return (
     <div className="follow-up-queue__list">
-      {opportunities.map((opportunity) => <FollowUpCard key={opportunity.id} opportunity={opportunity} />)}
+      {opportunities.map((opportunity) => <FollowUpCard key={opportunity.id} opportunity={opportunity} postingEnabled={postingEnabled} />)}
     </div>
   );
 }
