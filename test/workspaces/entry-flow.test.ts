@@ -27,8 +27,11 @@ test("the anonymous entry route stays a choice even before data access is config
 test("workspace links stay inside the explicit workspace route", () => {
   assert.equal(workspacePath("demo", "/app"), "/app/demo");
   assert.equal(workspacePath("demo", "/app/follow-up"), "/app/demo/follow-up");
+  assert.equal(workspacePath("demo", "/app/import"), "/app/demo/import");
+  assert.equal(workspacePath("demo", "/app/proof"), "/app/demo/proof");
   assert.equal(workspacePath("demo", "/app/queue"), "/app/demo/queue");
   assert.equal(workspacePath("mine", "/app/import"), "/app/my/import");
+  assert.equal(workspacePath("mine", "/app/proof"), "/app/my/proof");
   assert.equal(workspacePath("mine", "/app/queue"), "/app/my/queue");
 });
 

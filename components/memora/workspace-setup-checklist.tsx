@@ -6,7 +6,7 @@ const setupSteps = [
   ["03", "Review the thread", "Keep source evidence visible while Memora builds memory and follow-up opportunities.", "/app/memory"],
 ] as const;
 
-export function WorkspaceSetupChecklist() {
+export function WorkspaceSetupChecklist({ basePath }: { basePath: string }) {
   return (
     <section className="workspace-setup-checklist" aria-labelledby="workspace-setup-title">
       <div>
@@ -21,7 +21,7 @@ export function WorkspaceSetupChecklist() {
             <div>
               <h3>{title}</h3>
               <p>{description}</p>
-              <SecondaryLink href={href}>OPEN STEP <span aria-hidden="true">↗</span></SecondaryLink>
+               <SecondaryLink href={`${basePath}${href.slice("/app".length)}`}>OPEN STEP <span aria-hidden="true">↗</span></SecondaryLink>
             </div>
           </li>
         ))}

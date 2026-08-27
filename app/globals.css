@@ -2815,6 +2815,55 @@ select {
   background: var(--polaroid-white);
 }
 
+.follow-up-card__content-next-step {
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  border: 1.5px solid var(--ink);
+  border-radius: 10px;
+  background: var(--pale-yellow);
+}
+
+.follow-up-card__content-next-step-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.follow-up-card__content-next-step h4 {
+  margin-top: 6px;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 28px;
+}
+
+.follow-up-card__content-next-step > p,
+.follow-up-card__content-next-step-copy p {
+  color: var(--muted-ink);
+  font-size: 14px;
+  line-height: 21px;
+}
+
+.follow-up-card__content-next-step-copy {
+  display: grid;
+  gap: 5px;
+  padding: 14px 16px;
+  border-left: 3px solid var(--circle-orange);
+  background: var(--polaroid-white);
+}
+
+.follow-up-card__content-next-step-copy strong {
+  font-size: 16px;
+  line-height: 22px;
+}
+
+.follow-up-card__content-next-step-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .follow-up-card__draft-video-status {
   display: flex;
   flex-wrap: wrap;
@@ -3270,6 +3319,49 @@ select {
   font-family: var(--font-hand-stack);
   font-size: 19px;
   line-height: 28px;
+}
+
+.judge-proof__content-receipts {
+  display: grid;
+  gap: 16px;
+  padding-top: 20px;
+  border-top: 1.5px solid rgba(26, 26, 26, 0.35);
+}
+
+.judge-proof__content-receipts .judge-proof__section-heading {
+  align-items: flex-end;
+}
+
+.judge-proof__content-receipts h3 {
+  max-width: 620px;
+  margin-top: 8px;
+  font-size: 25px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 30px;
+}
+
+.judge-proof__content-receipt {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+  border: 1.5px solid var(--ink);
+  border-radius: 10px;
+  background: var(--pale-yellow);
+}
+
+.judge-proof__content-receipt-next-step {
+  display: grid;
+  gap: 6px;
+  padding: 14px 16px;
+  border-left: 3px solid var(--circle-orange);
+  background: var(--polaroid-white);
+}
+
+.judge-proof__content-receipt-next-step p {
+  color: var(--muted-ink);
+  font-size: 14px;
+  line-height: 21px;
 }
 
 .judge-proof__posted-proof {
@@ -5073,6 +5165,16 @@ select {
 
   .follow-up-card__reply-variant {
     grid-template-columns: 1fr;
+  }
+
+  .follow-up-card__content-next-step-heading {
+    flex-direction: column;
+  }
+
+  .follow-up-card__content-next-step-actions,
+  .follow-up-card__content-next-step-actions .primary-button,
+  .follow-up-card__content-next-step-actions .secondary-button {
+    width: 100%;
   }
 
   .audience-history__timeline {

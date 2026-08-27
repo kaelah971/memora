@@ -157,6 +157,39 @@ test("judge proof displays persisted action counts and no sent-reply claim", () 
   assert.doesNotMatch(proof.queue.representative?.suggestedReply ?? "", /posted|sent/i);
 });
 
+test("judge proof shows a needs-follow-up-content receipt without posting proof", () => {
+  const input = buildInput();
+  input.creatorActions.push({
+    id: "content-task-1",
+    creator_id: creator.id,
+    audience_member_id: "member-1",
+    interaction_id: "interaction-1",
+    creator_event_id: "event-1",
+    action_type: "follow_up",
+    status: "pending",
+    text: null,
+    created_at: "2026-08-26T12:00:00.000Z",
+    completed_at: null,
+    metadata: {
+      follow_up_status: "needs_follow_up_content",
+      reply_variant: "beginner-friendly",
+      reply_tone: "beginner-friendly",
+    },
+  } as Tables<"creator_actions">);
+
+  const proof = buildJudgeProofData(input);
+  const receipt = proof.queue.contentTaskReceipts[0];
+
+  assert.equal(proof.queue.needsFollowUpContent, 1);
+  assert.equal(proof.queue.posted, 0);
+  assert.equal(receipt?.status, "needs_follow_up_content");
+  assert.equal(receipt?.sourceQuestion, "What editing software should beginners use?");
+  assert.equal(receipt?.sourceTitle, "Beginner Editing Workflow");
+  assert.equal(receipt?.selectedTone, "beginner-friendly");
+  assert.equal(receipt?.createdAt, "2026-08-26T12:00:00.000Z");
+  assert.equal(receipt?.nextStep, "Create and import the follow-up video");
+});
+
 test("judge proof counts posted replies and exposes the saved proof", () => {
   const input = buildInput();
   input.creatorActions = [

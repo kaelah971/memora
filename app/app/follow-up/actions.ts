@@ -24,6 +24,7 @@ interface FollowUpOpportunityInput {
   interactionId: string;
   creatorEventId: string;
   audienceMemberId: string;
+  replyVariant?: FollowUpReplyVariant;
 }
 
 async function getReviewContext(input: FollowUpOpportunityInput) {
@@ -132,6 +133,8 @@ export async function markFollowUpNeedsContent(input: FollowUpOpportunityInput):
       follow_up_status: "needs_follow_up_content",
       opportunity_id: input.opportunityId,
       source: "p2-follow-up-queue",
+      reply_variant: input.replyVariant && isFollowUpReplyVariant(input.replyVariant) ? input.replyVariant : null,
+      reply_tone: input.replyVariant && isFollowUpReplyVariant(input.replyVariant) ? input.replyVariant : null,
     },
   });
 

@@ -3,11 +3,15 @@ import Link from "next/link";
 import { StateSticker } from "@/components/memora/state-sticker";
 import { formatOnboardingMessageForDisplay } from "@/lib/discord/onboarding";
 import { getJudgeOpportunityStatus } from "@/lib/data/judge-proof-builder";
-import type { JudgeAudienceRecord, JudgeProofData } from "@/lib/data/judge-proof-builder";
+import type { FollowUpContentTaskReceipt, JudgeAudienceRecord, JudgeProofData } from "@/lib/data/judge-proof-builder";
 import type { FollowUpOpportunity } from "@/lib/data/follow-up-builder";
 
 function shortDate(value: string): string {
   return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(value));
+}
+
+function timestamp(value: string): string {
+  return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }).format(new Date(value));
 }
 
 function statusTone(verified: boolean): "complete" | "open" {
@@ -81,8 +85,8 @@ function RepresentativeOpportunity({ opportunity }: { opportunity: FollowUpOppor
           <span className="section-label">REPRESENTATIVE OPPORTUNITY</span>
           <h3>{opportunity.audienceMemberName} / {opportunity.creatorEventTitle}</h3>
         </div>
-        <StateSticker tone={status === "posted" ? "complete" : status === "approved" ? "approved" : status === "dismissed" ? "remembered" : "open"}>
-          {status === "posted" ? "POSTED TO YOUTUBE" : status === "approved" ? "APPROVED" : status === "dismissed" ? "DISMISSED" : "NEEDS REVIEW"}
+        <StateSticker tone={status === "posted" ? "complete" : status === "approved" ? "approved" : status === "dismissed" || status === "needs_follow_up_content" ? "remembered" : "open"}>
+          {status === "posted" ? "POSTED TO YOUTUBE" : status === "approved" ? "APPROVED" : status === "dismissed" ? "DISMISSED" : status === "needs_follow_up_content" ? "MARKED AS CONTENT TO CREATE" : "NEEDS REVIEW"}
         </StateSticker>
       </div>
       <div className="judge-proof__opportunity-thread">
@@ -108,6 +112,11 @@ function RepresentativeOpportunity({ opportunity }: { opportunity: FollowUpOppor
           <span className="state-sticker state-sticker--complete">POSTED TO YOUTUBE</span>
           <p>{opportunity.postedReply.replyText}</p>
           <span className="data-label">REPLY ID / {opportunity.postedReply.youtubeReplyId} / POSTED {shortDate(opportunity.postedReply.postedAt)}</span>
+          </div>
+      ) : status === "needs_follow_up_content" ? (
+        <div className="judge-proof__content-receipt-next-step">
+          <span className="data-label">CONTENT TASK SAVED / NOT SENT</span>
+          <p>Next: create the beginner walkthrough, then import the published video.</p>
         </div>
       ) : (
         <div className="judge-proof__draft">
@@ -116,6 +125,42 @@ function RepresentativeOpportunity({ opportunity }: { opportunity: FollowUpOppor
         </div>
       )}
       <span className="judge-proof__proof-label">{opportunity.confidenceLabel}</span>
+    </article>
+  );
+}
+
+function FollowUpContentReceipt({ receipt }: { receipt: FollowUpContentTaskReceipt }) {
+  return (
+    <article className="judge-proof__content-receipt">
+      <div className="judge-proof__opportunity-heading">
+        <div>
+          <span className="section-label">CONTENT TASK RECEIPT</span>
+          <h3>{receipt.audienceMemberName} / {receipt.sourceTitle}</h3>
+        </div>
+        <StateSticker tone="remembered">NEEDS FOLLOW-UP CONTENT</StateSticker>
+      </div>
+      <div className="judge-proof__opportunity-thread">
+        <div>
+          <span className="data-label">FAN / SOURCE QUESTION</span>
+          <p>{receipt.audienceMemberName}: “{receipt.sourceQuestion}”</p>
+        </div>
+        <div>
+          <span className="data-label">STATUS</span>
+          <p>{receipt.status}</p>
+        </div>
+        <div>
+          <span className="data-label">SELECTED TONE</span>
+          <p>{receipt.selectedTone ?? "Not recorded"}</p>
+        </div>
+        <div>
+          <span className="data-label">MARKED</span>
+          <p>{timestamp(receipt.createdAt)}</p>
+        </div>
+      </div>
+      <div className="judge-proof__content-receipt-next-step">
+        <span className="data-label">NEXT STEP</span>
+        <p>{receipt.nextStep}. Return to Import after publishing it so Memora can reconnect it to this viewer.</p>
+      </div>
     </article>
   );
 }
@@ -152,14 +197,14 @@ function DiscordOpportunityProof({ opportunity }: { opportunity: FollowUpOpportu
   );
 }
 
-export function JudgeProof({ proof }: { proof: JudgeProofData }) {
+export function JudgeProof({ proof, basePath }: { proof: JudgeProofData; basePath: string }) {
   return (
     <div className="judge-proof">
       <section className="judge-proof__hero" aria-labelledby="judge-proof-title">
         <div>
           <span className="section-label">JUDGE EVIDENCE / P8</span>
           <h2 id="judge-proof-title">Observe → Remember → Notice → Reconnect → Prove.</h2>
-          <p>One evidence page for the full Memora loop: a real audience moment enters the workspace, stays attached to its source, meets a later creator moment, and becomes a creator-reviewed draft or confirmed reply.</p>
+          <p>One evidence page for the full Memora loop: a real audience moment enters the workspace, stays attached to its source, meets a later creator moment, and becomes a creator-reviewed draft, content task, or confirmed reply.</p>
         </div>
         <div className="judge-proof__hero-note">
           <span className="state-sticker state-sticker--complete">RULE-BOUNDED ASSIST</span>
@@ -198,8 +243,8 @@ export function JudgeProof({ proof }: { proof: JudgeProofData }) {
           <ProofRow label="SOURCE-BACKED PEOPLE" value={`${proof.ingestion.sourceBackedAudienceCount}`} />
         </div>
         <div className="judge-proof__links">
-          <Link className="secondary-link" href="/app/import">Open import desk <span className="secondary-link__arrow">↗</span></Link>
-          <Link className="secondary-link" href="/app/memory">Open audience memory <span className="secondary-link__arrow">↗</span></Link>
+           <Link className="secondary-link" href={`${basePath}/import`}>Open import desk <span className="secondary-link__arrow">↗</span></Link>
+           <Link className="secondary-link" href={`${basePath}/memory`}>Open audience memory <span className="secondary-link__arrow">↗</span></Link>
         </div>
       </section>
 
@@ -220,7 +265,7 @@ export function JudgeProof({ proof }: { proof: JudgeProofData }) {
           <ProofRow label="DISCORD OPPORTUNITIES" value={`${proof.discord.opportunityCount}`} />
         </div>
         <div className="judge-proof__links">
-          <Link className="secondary-link" href="/app/import/discord">Open Discord import <span className="secondary-link__arrow">↗</span></Link>
+           <Link className="secondary-link" href={`${basePath}/import/discord`}>Open Discord import <span className="secondary-link__arrow">↗</span></Link>
           <span className="data-label">CHANNELS / {proof.discord.monitoredChannelIds.join(", ") || "NONE"}</span>
         </div>
         {proof.discord.representative ? <DiscordOpportunityProof opportunity={proof.discord.representative} /> : null}
@@ -259,7 +304,7 @@ export function JudgeProof({ proof }: { proof: JudgeProofData }) {
             {proof.onboarding.latestSentMessageId ? <span className="data-label">SENT MESSAGE / {proof.onboarding.latestSentMessageId}</span> : <span className="data-label">NO DISCORD SEND PROOF</span>}
           </div>
         ) : null}
-        <Link className="secondary-link" href="/app/import/discord">Open onboarding settings <span className="secondary-link__arrow">↗</span></Link>
+         <Link className="secondary-link" href={`${basePath}/import/discord`}>Open onboarding settings <span className="secondary-link__arrow">↗</span></Link>
       </section>
 
       <section className="judge-proof__section" aria-labelledby="judge-audience-title">
@@ -283,21 +328,34 @@ export function JudgeProof({ proof }: { proof: JudgeProofData }) {
             <span className="section-label">FOLLOW-UP QUEUE PROOF</span>
             <h2 id="judge-queue-title">Notice the moment, then let the creator decide.</h2>
           </div>
-          <Link className="secondary-link" href="/app/follow-up">Open opportunity queue <span className="secondary-link__arrow">↗</span></Link>
+           <Link className="secondary-link" href={`${basePath}/follow-up`}>Open opportunity queue <span className="secondary-link__arrow">↗</span></Link>
         </div>
         <div className="judge-proof__queue-stats">
           <ProofRow label="TOTAL OPPORTUNITIES" value={`${proof.queue.total}`} />
           <ProofRow label="NEEDS REVIEW" value={`${proof.queue.needsReview}`} />
-          <ProofRow label="APPROVED" value={`${proof.queue.approved}`} />
-          <ProofRow label="DISMISSED" value={`${proof.queue.dismissed}`} />
-          <ProofRow label="POSTED TO YOUTUBE" value={`${proof.queue.posted}`} />
+           <ProofRow label="APPROVED" value={`${proof.queue.approved}`} />
+           <ProofRow label="DISMISSED" value={`${proof.queue.dismissed}`} />
+           <ProofRow label="NEEDS FOLLOW-UP CONTENT" value={`${proof.queue.needsFollowUpContent}`} />
+           <ProofRow label="POSTED TO YOUTUBE" value={`${proof.queue.posted}`} />
           <ProofRow label="DISCORD OPPORTUNITIES" value={`${proof.queue.discordOpportunities}`} />
         </div>
-        {proof.queue.representative ? (
-          <RepresentativeOpportunity opportunity={proof.queue.representative} />
-        ) : (
-          <div className="judge-proof__inline-empty">No opportunity is available yet. The queue will only show a card when the source data supports a transparent question and creator-event connection.</div>
-        )}
+         {proof.queue.representative ? (
+           <RepresentativeOpportunity opportunity={proof.queue.representative} />
+         ) : (
+           <div className="judge-proof__inline-empty">No opportunity is available yet. The queue will only show a card when the source data supports a transparent question and creator-event connection.</div>
+         )}
+         {proof.queue.contentTaskReceipts.length > 0 ? (
+           <div className="judge-proof__content-receipts" aria-labelledby="judge-content-task-title">
+             <div className="judge-proof__section-heading">
+               <div>
+                 <span className="section-label">CONTENT TASK RECEIPTS</span>
+                 <h3 id="judge-content-task-title">Future follow-ups stay attached to their source.</h3>
+               </div>
+               <span className="data-label">{proof.queue.contentTaskReceipts.length} SAVED</span>
+             </div>
+             {proof.queue.contentTaskReceipts.map((receipt) => <FollowUpContentReceipt key={receipt.id} receipt={receipt} />)}
+           </div>
+         ) : null}
         {proof.queue.posted === 0 ? (
           <div className="judge-proof__inline-empty">No YouTube replies posted yet.</div>
         ) : proof.queue.latestPostedReply ? (
@@ -326,7 +384,7 @@ export function JudgeProof({ proof }: { proof: JudgeProofData }) {
           <ProofRow label="CONVERSATION" value={proof.minds.conversationId} />
           <ProofRow label="PROOF SOURCE" value={proof.minds.label} />
         </div>
-        <Link className="secondary-link" href="/app/proof/minds-spike">Open Minds proof surface <span className="secondary-link__arrow">↗</span></Link>
+         <Link className="secondary-link" href={`${basePath}/proof/minds-spike`}>Open Minds proof surface <span className="secondary-link__arrow">↗</span></Link>
       </section>
 
       <section className="judge-proof__path" aria-labelledby="judge-path-title">
@@ -335,11 +393,11 @@ export function JudgeProof({ proof }: { proof: JudgeProofData }) {
           <h2 id="judge-path-title">Five stops. One understandable loop.</h2>
         </div>
         <ol>
-          <li><strong>01 / Observe</strong><span>Connect YouTube, fetch videos, and import comments.</span><Link href="/app/import">Open import</Link></li>
-          <li><strong>02 / Remember</strong><span>Show source-backed people and their original comments.</span><Link href="/app/memory">Open memory</Link></li>
-          <li><strong>03 / Notice</strong><span>Review the matched opportunity and its why-now proof.</span><Link href="/app/follow-up">Open queue</Link></li>
-          <li><strong>04 / Reconnect</strong><span>Approve, confirm, then post. Nothing posts without explicit confirmation.</span><Link href="/app/follow-up">Review draft</Link></li>
-          <li><strong>05 / Prove</strong><span>Show the persistent Minds continuity evidence.</span><Link href="/app/proof/minds-spike">Open proof</Link></li>
+           <li><strong>01 / Observe</strong><span>Connect YouTube, fetch videos, and import comments.</span><Link href={`${basePath}/import`}>Open import</Link></li>
+           <li><strong>02 / Remember</strong><span>Show source-backed people and their original comments.</span><Link href={`${basePath}/memory`}>Open memory</Link></li>
+           <li><strong>03 / Notice</strong><span>Review the matched opportunity and its why-now proof.</span><Link href={`${basePath}/follow-up`}>Open queue</Link></li>
+           <li><strong>04 / Reconnect</strong><span>Approve, confirm, or save the next video as a content task. Nothing posts without explicit confirmation.</span><Link href={`${basePath}/follow-up`}>Review follow-up</Link></li>
+           <li><strong>05 / Prove</strong><span>Show the persistent Minds continuity evidence.</span><Link href={`${basePath}/proof/minds-spike`}>Open proof</Link></li>
         </ol>
       </section>
     </div>

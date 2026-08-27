@@ -74,7 +74,7 @@ export default async function FollowUpPage() {
           </div>
 
           {queueResult.data.opportunities.length > 0 ? (
-             <FollowUpQueue opportunities={queueResult.data.opportunities} postingEnabled={postingEnabled} />
+             <FollowUpQueue opportunities={queueResult.data.opportunities} postingEnabled={postingEnabled} basePath={basePath} />
           ) : (
             <ProductEmptyState
               eyebrow={queueResult.data.dataOrigin === "none" ? "NO OPPORTUNITIES YET" : "NO CLEAR MATCHES"}

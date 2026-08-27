@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 import {
   markFollowUpNeedsContent,
@@ -26,6 +27,7 @@ import type {
 interface FollowUpQueueProps {
   opportunities: FollowUpOpportunity[];
   postingEnabled: boolean;
+  basePath: string;
 }
 
 function formatDate(value: string): string {
@@ -37,10 +39,10 @@ function statusLabel(status: FollowUpStatus): string {
     ? "APPROVED"
     : status === "dismissed"
       ? "DISMISSED"
-      : status === "posted"
+        : status === "posted"
         ? "POSTED TO YOUTUBE"
         : status === "needs_follow_up_content"
-          ? "CONTENT TO CREATE"
+          ? "MARKED AS CONTENT TO CREATE"
           : "NEEDS REVIEW";
 }
 
@@ -67,7 +69,7 @@ function proofRow(label: string, value: string) {
   );
 }
 
-function FollowUpCard({ opportunity, postingEnabled }: { opportunity: FollowUpOpportunity; postingEnabled: boolean }) {
+function FollowUpCard({ opportunity, postingEnabled, basePath }: { opportunity: FollowUpOpportunity; postingEnabled: boolean; basePath: string }) {
   const router = useRouter();
   const [status, setStatus] = useState<FollowUpStatus>(opportunity.status);
   const [postedReply, setPostedReply] = useState<PostedReplyProof | null>(opportunity.postedReply);
@@ -128,6 +130,7 @@ function FollowUpCard({ opportunity, postingEnabled }: { opportunity: FollowUpOp
         interactionId: opportunity.interactionId,
         creatorEventId: opportunity.creatorEventId,
         audienceMemberId: opportunity.audienceMemberId,
+        replyVariant: selectedReplyVariant,
       });
       if (!result.ok || !result.status) {
         setError(result.error ?? "The content planning status could not be saved.");
@@ -293,6 +296,28 @@ function FollowUpCard({ opportunity, postingEnabled }: { opportunity: FollowUpOp
         </section>
       ) : null}
 
+      {status === "needs_follow_up_content" ? (
+        <section className="follow-up-card__content-next-step" aria-labelledby={`${opportunity.id}-content-next-step-title`}>
+          <div className="follow-up-card__content-next-step-heading">
+            <div>
+              <span className="section-label">SAVED FOLLOW-UP TASK</span>
+              <h4 id={`${opportunity.id}-content-next-step-title`}>Marked as content to create.</h4>
+            </div>
+            <StateSticker tone="remembered">SAVED STATE</StateSticker>
+          </div>
+          <p>Memora is keeping this fan attached to the future follow-up.</p>
+          <div className="follow-up-card__content-next-step-copy">
+            <strong>Next: create the beginner walkthrough.</strong>
+            <p>After you publish it, come back to Import, fetch your latest videos, and import the new video.</p>
+            <p>Memora will then reconnect this video to the original fan question.</p>
+          </div>
+          <div className="follow-up-card__content-next-step-actions">
+            <Link className="primary-button" href={`${basePath}/import`}>GO TO IMPORT</Link>
+            <Link className="secondary-button" href={`${basePath}/proof`}>VIEW PROOF</Link>
+          </div>
+        </section>
+      ) : null}
+
       {postedReply ? (
         <section className="follow-up-card__posted" aria-labelledby={`${opportunity.id}-posted-title`}>
           <div className="follow-up-card__draft-heading">
@@ -311,11 +336,11 @@ function FollowUpCard({ opportunity, postingEnabled }: { opportunity: FollowUpOp
       ) : (
         <section className="follow-up-card__draft" aria-labelledby={`${opportunity.id}-draft-title`}>
           <div className="follow-up-card__draft-heading">
-            <div>
-              <span className="section-label">SUGGESTED FOLLOW-UP</span>
-              <h4 id={`${opportunity.id}-draft-title`}>A draft for creator review</h4>
-            </div>
-            <span className="data-label">DRAFT ONLY / NOT SENT</span>
+             <div>
+               <span className="section-label">{status === "needs_follow_up_content" ? "FUTURE FOLLOW-UP REPLY" : "SUGGESTED FOLLOW-UP"}</span>
+               <h4 id={`${opportunity.id}-draft-title`}>{status === "needs_follow_up_content" ? "Keep this reply for when the video is ready." : "A draft for creator review"}</h4>
+             </div>
+             <span className="data-label">{status === "needs_follow_up_content" ? "CONTENT TASK SAVED / NOT SENT" : "DRAFT ONLY / NOT SENT"}</span>
           </div>
             <fieldset className="follow-up-card__reply-variants">
               <legend className="section-label">CHOOSE A REPLY VARIANT</legend>
@@ -460,10 +485,10 @@ function FollowUpCard({ opportunity, postingEnabled }: { opportunity: FollowUpOp
   );
 }
 
-export function FollowUpQueue({ opportunities, postingEnabled }: FollowUpQueueProps) {
+export function FollowUpQueue({ opportunities, postingEnabled, basePath }: FollowUpQueueProps) {
   return (
     <div className="follow-up-queue__list">
-      {opportunities.map((opportunity) => <FollowUpCard key={opportunity.id} opportunity={opportunity} postingEnabled={postingEnabled} />)}
+      {opportunities.map((opportunity) => <FollowUpCard key={opportunity.id} opportunity={opportunity} postingEnabled={postingEnabled} basePath={basePath} />)}
     </div>
   );
 }

@@ -30,6 +30,12 @@ type DiscordConnection = Tables<"discord_connections">;
 type DiscordOnboardingSettings = Tables<"discord_onboarding_settings">;
 type DiscordOnboardingReceipt = Tables<"discord_onboarding_receipts">;
 
+function actionMetadataString(action: CreatorAction, key: string): string | null {
+  if (!action.metadata || typeof action.metadata !== "object" || Array.isArray(action.metadata)) return null;
+  const value = (action.metadata as Record<string, unknown>)[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
+
 export interface JudgeAudienceInteraction {
   id: string;
   text: string;
@@ -43,6 +49,18 @@ export interface JudgeAudienceRecord {
   platform: string;
   imported: boolean;
   interactions: JudgeAudienceInteraction[];
+}
+
+export interface FollowUpContentTaskReceipt {
+  id: string;
+  opportunityId: string;
+  audienceMemberName: string;
+  sourceTitle: string;
+  sourceQuestion: string;
+  status: "needs_follow_up_content";
+  selectedTone: string | null;
+  createdAt: string;
+  nextStep: "Create and import the follow-up video";
 }
 
 export interface JudgeProofData {
@@ -98,6 +116,8 @@ export interface JudgeProofData {
     latestPostedSourceTitle: string | null;
     representative: FollowUpOpportunity | null;
     discordOpportunities: number;
+    needsFollowUpContent: number;
+    contentTaskReceipts: FollowUpContentTaskReceipt[];
     actionCount: number;
   };
   minds: {
@@ -129,6 +149,7 @@ export interface JudgeProofBuildInput {
 export function getJudgeOpportunityStatus(opportunity: FollowUpOpportunity): FollowUpOpportunity["status"] {
   if (opportunity.postedReply) return "posted";
   if (opportunity.status === "dismissed") return "dismissed";
+  if (opportunity.status === "needs_follow_up_content") return "needs_follow_up_content";
   if (opportunity.status === "approved") return "approved";
   return "needs_review";
 }
@@ -188,6 +209,8 @@ export function emptyJudgeProofData(): JudgeProofData {
       latestPostedSourceTitle: null,
       representative: null,
       discordOpportunities: 0,
+      needsFollowUpContent: 0,
+      contentTaskReceipts: [],
       actionCount: 0,
     },
     minds: {
@@ -245,6 +268,29 @@ export function buildJudgeProofData(input: JudgeProofBuildInput): JudgeProofData
   const postedYouTubeOpportunity = opportunities.find((opportunity) => opportunity.postedReply) ??
     (postedYouTubeReplies[0] ? opportunities.find((opportunity) => opportunity.id === postedYouTubeReplies[0].opportunityId) ?? null : null);
   const discordOpportunities = opportunities.filter((opportunity) => opportunity.sourcePlatform === "discord");
+  const contentTaskOpportunities = new Map(
+    opportunities.map((opportunity) => [`${opportunity.interactionId}:${opportunity.creatorEventId}`, opportunity]),
+  );
+  const contentTaskReceipts = [...input.creatorActions]
+    .sort((left, right) => right.created_at.localeCompare(left.created_at))
+    .map((action): FollowUpContentTaskReceipt | null => {
+      if (action.action_type !== "follow_up" || !action.interaction_id || !action.creator_event_id) return null;
+      if (actionMetadataString(action, "follow_up_status") !== "needs_follow_up_content") return null;
+      const opportunity = contentTaskOpportunities.get(`${action.interaction_id}:${action.creator_event_id}`);
+      if (!opportunity) return null;
+      return {
+        id: action.id,
+        opportunityId: opportunity.id,
+        audienceMemberName: opportunity.audienceMemberName,
+        sourceTitle: opportunity.sourceTitle,
+        sourceQuestion: opportunity.proof.sourceComment,
+        status: "needs_follow_up_content",
+        selectedTone: actionMetadataString(action, "reply_tone") ?? actionMetadataString(action, "reply_variant"),
+        createdAt: action.created_at,
+        nextStep: "Create and import the follow-up video",
+      };
+    })
+    .filter((receipt): receipt is FollowUpContentTaskReceipt => Boolean(receipt));
   const latestPostedAction = postedYouTubeReplies[0]
     ? input.creatorActions.find((action) => getPostedReplyProof(action)?.youtubeReplyId === postedYouTubeReplies[0].youtubeReplyId) ?? null
     : null;
@@ -259,6 +305,8 @@ export function buildJudgeProofData(input: JudgeProofBuildInput): JudgeProofData
     approved: opportunities.filter((opportunity) => getJudgeOpportunityStatus(opportunity) === "approved").length,
     dismissed: opportunities.filter((opportunity) => getJudgeOpportunityStatus(opportunity) === "dismissed").length,
     needsReview: opportunities.filter((opportunity) => getJudgeOpportunityStatus(opportunity) === "needs_review").length,
+    needsFollowUpContent: opportunities.filter((opportunity) => getJudgeOpportunityStatus(opportunity) === "needs_follow_up_content").length,
+    contentTaskReceipts,
     posted: postedYouTubeReplies.length,
     latestPostedReply: postedYouTubeReplies[0] ?? null,
     latestPostedOpportunityId: postedYouTubeReplies[0]?.opportunityId ?? null,

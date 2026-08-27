@@ -4,10 +4,14 @@ import { JudgeProof } from "@/components/memora/judge-proof";
 import { ProductEmptyState } from "@/components/memora/product-empty-state";
 import { WorkspaceSetupChecklist } from "@/components/memora/workspace-setup-checklist";
 import { loadJudgeProof } from "@/lib/data/judge-proof";
+import { getCurrentWorkspaceSelection } from "@/lib/workspaces/access";
+import { workspaceBasePath } from "@/lib/workspaces/entry";
 
 export const dynamic = "force-dynamic";
 
 export default async function ProofPage() {
+  const selection = await getCurrentWorkspaceSelection();
+  const basePath = workspaceBasePath(selection.mode);
   const proofResult = await loadJudgeProof();
 
   return (
@@ -26,13 +30,13 @@ export default async function ProofPage() {
           eyebrow="NO CREATOR WORKSPACE"
           title="The proof thread needs a workspace first."
           description="Connect the deterministic workspace, then import a source-backed audience moment to make the loop visible."
-          href="/app/import"
+           href={`${basePath}/import`}
           actionLabel="Open import"
         />
       ) : proofResult.data.ingestion.dataOrigin === "none" && proofResult.data.audience.length === 0 && proofResult.data.queue.total === 0 ? (
-        <WorkspaceSetupChecklist />
+        <WorkspaceSetupChecklist basePath={basePath} />
       ) : (
-        <JudgeProof proof={proofResult.data} />
+        <JudgeProof proof={proofResult.data} basePath={basePath} />
       )}
     </AppScreen>
   );
