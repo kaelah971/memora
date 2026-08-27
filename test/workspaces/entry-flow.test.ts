@@ -27,7 +27,9 @@ test("the anonymous entry route stays a choice even before data access is config
 test("workspace links stay inside the explicit workspace route", () => {
   assert.equal(workspacePath("demo", "/app"), "/app/demo");
   assert.equal(workspacePath("demo", "/app/follow-up"), "/app/demo/follow-up");
+  assert.equal(workspacePath("demo", "/app/queue"), "/app/demo/queue");
   assert.equal(workspacePath("mine", "/app/import"), "/app/my/import");
+  assert.equal(workspacePath("mine", "/app/queue"), "/app/my/queue");
 });
 
 test("personal onboarding only appears for an empty personal workspace", () => {

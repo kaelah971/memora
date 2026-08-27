@@ -60,6 +60,7 @@ export async function importYouTubeVideoComments(
       youtube_video_id: video.id,
       youtube_channel_id: video.channelId,
       youtube_channel_title: video.channelTitle,
+      description: video.description,
       thumbnail_url: video.thumbnailUrl,
       comment_count: video.commentCount,
     },

@@ -2220,6 +2220,158 @@ select {
   gap: 24px;
 }
 
+.queue-overview {
+  display: grid;
+  gap: 24px;
+}
+
+.queue-overview__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 24px;
+  padding: 28px;
+  border: 1.5px solid var(--ink);
+  border-radius: 10px;
+  background: var(--light-blue);
+}
+
+.queue-overview__header h2 {
+  max-width: 640px;
+  margin-top: 10px;
+  font-size: clamp(28px, 4vw, 42px);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.04;
+}
+
+.queue-overview__header p {
+  max-width: 650px;
+  margin-top: 14px;
+  color: var(--muted-ink);
+  font-size: 16px;
+  line-height: 24px;
+}
+
+.queue-overview__summary {
+  display: grid;
+  min-width: 140px;
+  gap: 6px;
+  padding: 20px;
+  border: 1.5px solid var(--ink);
+  border-radius: 10px;
+  background: var(--polaroid-white);
+}
+
+.queue-overview__summary strong {
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 32px;
+}
+
+.queue-opportunity-list {
+  display: grid;
+  gap: 16px;
+}
+
+.queue-opportunity {
+  border: 1.5px solid var(--ink);
+  border-radius: 10px;
+  background: var(--polaroid-white);
+  box-shadow: 3px 3px 0 rgba(26, 26, 26, 0.12);
+}
+
+.queue-opportunity__link {
+  display: grid;
+  gap: 20px;
+  padding: 24px;
+}
+
+.queue-opportunity__link:hover {
+  background: var(--notebook-cream);
+}
+
+.queue-opportunity__header,
+.queue-opportunity__footer {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.queue-opportunity__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.queue-opportunity__header h2 {
+  max-width: 650px;
+  margin-top: 14px;
+  font-size: clamp(22px, 3vw, 30px);
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.08;
+}
+
+.queue-opportunity__header p {
+  max-width: 700px;
+  margin-top: 10px;
+  color: var(--muted-ink);
+  font-size: 15px;
+  line-height: 23px;
+}
+
+.queue-opportunity__thread {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px minmax(0, 1fr);
+  align-items: stretch;
+  gap: 12px;
+}
+
+.queue-opportunity__thread > div {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+  padding: 16px;
+  border: 1.5px solid var(--ink);
+  border-radius: 10px;
+  background: var(--notebook-cream);
+}
+
+.queue-opportunity__thread > div:last-child {
+  background: var(--light-blue);
+}
+
+.queue-opportunity__quote {
+  font-family: var(--font-hand-stack);
+  font-size: 19px;
+  line-height: 27px;
+}
+
+.queue-opportunity__thread strong {
+  font-size: 16px;
+  line-height: 22px;
+}
+
+.queue-opportunity__thread-line {
+  align-self: center;
+  height: 3px;
+  background: var(--circle-orange);
+}
+
+.queue-opportunity__footer {
+  align-items: center;
+  padding-top: 4px;
+}
+
+.follow-up-card {
+  scroll-margin-top: 24px;
+}
+
 .follow-up-loading,
 .follow-up-error {
   display: grid;
@@ -2734,6 +2886,19 @@ select {
   color: var(--muted-ink);
   font-size: 13px;
   line-height: 19px;
+}
+
+.follow-up-card__mind-action {
+  display: grid;
+  gap: 6px;
+  min-width: 220px;
+}
+
+.follow-up-card__mind-helper {
+  max-width: 280px;
+  color: var(--muted-ink);
+  font-size: 12px;
+  line-height: 17px;
 }
 
 .judge-proof {
@@ -4198,7 +4363,8 @@ select {
   .settings-panel,
   .settings-voice,
   .youtube-connection__facts,
-  .follow-up-queue__intro {
+  .follow-up-queue__intro,
+  .queue-overview__header {
     grid-template-columns: 1fr;
   }
 
@@ -4259,13 +4425,37 @@ select {
     flex-direction: column;
   }
 
+  .queue-opportunity__header,
+  .queue-opportunity__footer {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
   .follow-up-card__thread {
     grid-template-columns: 1fr;
+  }
+
+  .follow-up-card__mind-advisory {
+    grid-template-columns: 1fr;
+  }
+
+  .follow-up-card__mind-advisory-item--wide {
+    grid-column: auto;
   }
 
   .follow-up-card__thread-line {
     width: 3px;
     height: 24px;
+    justify-self: center;
+  }
+
+  .queue-opportunity__thread {
+    grid-template-columns: 1fr;
+  }
+
+  .queue-opportunity__thread-line {
+    width: 3px;
+    height: 20px;
     justify-self: center;
   }
 

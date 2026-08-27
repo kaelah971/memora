@@ -4,10 +4,14 @@ import { FollowUpQueue } from "@/components/memora/follow-up-queue";
 import { ProductEmptyState } from "@/components/memora/product-empty-state";
 import { getCreatorWorkspace } from "@/lib/data/creators";
 import { listFollowUpOpportunities } from "@/lib/data/follow-up-opportunities";
+import { getCurrentWorkspaceSelection } from "@/lib/workspaces/access";
+import { workspaceBasePath } from "@/lib/workspaces/entry";
 
 export const dynamic = "force-dynamic";
 
 export default async function FollowUpPage() {
+  const selection = await getCurrentWorkspaceSelection();
+  const basePath = workspaceBasePath(selection.mode);
   const creatorResult = await getCreatorWorkspace();
   const queueResult = creatorResult.data
     ? await listFollowUpOpportunities(creatorResult.data.id)
@@ -16,8 +20,8 @@ export default async function FollowUpPage() {
   return (
     <AppScreen
       eyebrow="MEMORA / FOLLOW UP"
-      title="Opportunity Queue"
-      description="A source-backed question meets a new creator moment. Review the reason, then decide what to do."
+      title="Follow-up review"
+      description="Inspect the source-backed memory thread, ask Memora Mind for advisory reasoning, then decide what to do."
       status="P5 / LIVE MIND"
     >
       {!creatorResult.access.available ? (
@@ -27,7 +31,7 @@ export default async function FollowUpPage() {
           eyebrow="NO CREATOR WORKSPACE"
           title="The opportunity queue has no workspace yet."
           description="Connect the deterministic workspace, then import source-backed audience moments to find follow-up opportunities."
-          href="/app/import"
+          href={`${basePath}/import`}
           actionLabel="Open import"
         />
       ) : queueResult && !queueResult.access.available ? (
@@ -72,7 +76,7 @@ export default async function FollowUpPage() {
               eyebrow={queueResult.data.dataOrigin === "none" ? "NO OPPORTUNITIES YET" : "NO CLEAR MATCHES"}
               title={queueResult.data.dataOrigin === "none" ? "No opportunities yet." : "No transparent follow-up match yet."}
               description={queueResult.data.dataOrigin === "none" ? "Import source-backed moments from YouTube or Discord. Memora will only create a card when a question and later creator event share a clear source or topic connection." : "The queue found source records but no question and later creator event connected by the current transparent heuristics. Nothing has been invented."}
-              href="/app/import"
+               href={`${basePath}/import`}
               actionLabel="Open import"
             />
           )}

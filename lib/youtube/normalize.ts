@@ -13,6 +13,7 @@ export function normalizeYouTubeVideo(item: youtube_v3.Schema$Video): YouTubeVid
   return {
     id: item.id,
     title: item.snippet.title,
+    description: item.snippet.description ?? null,
     publishedAt: item.snippet.publishedAt ?? null,
     thumbnailUrl: item.snippet.thumbnails?.medium?.url ?? item.snippet.thumbnails?.default?.url ?? null,
     channelId: item.snippet.channelId ?? null,

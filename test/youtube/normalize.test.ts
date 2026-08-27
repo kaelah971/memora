@@ -6,7 +6,21 @@ import type { youtube_v3 } from "googleapis";
 import {
   countKnownYouTubeComments,
   normalizeYouTubeCommentThread,
+  normalizeYouTubeVideo,
 } from "../../lib/youtube/normalize";
+
+test("YouTube video normalization preserves the stored description", () => {
+  assert.equal(
+    normalizeYouTubeVideo({
+      id: "abcDEF12345",
+      snippet: {
+        title: "Beginner Workflow",
+        description: "A stored video description.",
+      },
+    } as youtube_v3.Schema$Video)?.description,
+    "A stored video description.",
+  );
+});
 
 test("YouTube normalization preserves source text and missing counts as null", () => {
   const thread = {

@@ -84,7 +84,11 @@ export async function POST(request: Request) {
       throw new MindsIntegrationError("TIMEOUT", "Memora Mind did not return reasoning before the safe timeout.", { status: 504 });
     }
 
-    const parsed = parseMindReasoningResponse(capture.response, Boolean(opportunity.postedReply));
+    const parsed = parseMindReasoningResponse(
+      capture.response,
+      Boolean(opportunity.postedReply),
+      opportunity.creatorEventVideoUrl,
+    );
     const saved = await upsertMindReasoning({
       creator_id: creator.id,
       opportunity_id: opportunity.id,
@@ -93,11 +97,20 @@ export async function POST(request: Request) {
       conversation_id: conversationId,
       reasoning_text: parsed.reasoningText,
       tone: parsed.tone,
-      variants: {
-        warm: parsed.variants.warm,
-        short: parsed.variants.short,
-        beginner_friendly: parsed.variants.beginnerFriendly,
-      },
+        variants: {
+          warm: parsed.variants.warm,
+          short: parsed.variants.short,
+          beginner_friendly: parsed.variants.beginnerFriendly,
+          advisory: {
+            fan_question: parsed.advisory.fanQuestion,
+            source_context: parsed.advisory.sourceContext,
+            likely_need: parsed.advisory.likelyNeed,
+            recommended_action: parsed.advisory.recommendedAction,
+            reply_now: parsed.advisory.replyNow,
+            follow_up_outline: parsed.advisory.followUpOutline,
+            attached_video_status: parsed.advisory.attachedVideoStatus,
+          },
+        },
     });
     if (saved.error || !saved.data) {
       throw new MindsIntegrationError("STORAGE", "Memora could not save the Mind reasoning.", { status: 500 });

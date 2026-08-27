@@ -19,6 +19,7 @@ function opportunity(overrides: Partial<FollowUpOpportunity> = {}): FollowUpOppo
     commentPublishedAt: "2026-08-24T10:00:00.000Z",
     sourceId: "source-1",
     sourceTitle: "Beginner Editing Workflow",
+    sourceDescription: "A stored description about beginner editing.",
     sourceUrl: "https://www.youtube.com/watch?v=video-1",
     sourcePlatform: "youtube",
     creatorEventId: "event-1",
@@ -27,6 +28,8 @@ function opportunity(overrides: Partial<FollowUpOpportunity> = {}): FollowUpOppo
     creatorEventOccurredAt: "2026-08-25T10:00:00.000Z",
     creatorEventSourceTitle: "A New Beginner Workflow",
     creatorEventSourceUrl: "https://www.youtube.com/watch?v=video-1",
+    creatorEventVideoId: null,
+    creatorEventVideoUrl: null,
     whyNow: "The new video shares the earlier software topic.",
     suggestedReply: "Hey Alex, this new workflow video may help.",
     confidenceLabel: "Strong evidence",
@@ -60,6 +63,10 @@ test("reasoning prompt contains only server-resolved facts and safety instructio
   assert.match(prompt, /Source video: "Beginner Editing Workflow"/);
   assert.match(prompt, /New creator event: "A New Beginner Workflow"/);
   assert.match(prompt, /Existing draft:/);
+  assert.match(prompt, /Return exactly these labeled sections/);
+  assert.match(prompt, /FAN_QUESTION:/);
+  assert.match(prompt, /ATTACHED_VIDEO_STATUS:/);
+  assert.match(prompt, /Never invent a URL/);
   assert.match(prompt, /Do not invent unseen history/);
   assert.match(prompt, /Memora never posts without creator approval and final confirmation/);
   assert.match(prompt, /No posted reply proof exists/);
@@ -99,6 +106,39 @@ test("Mind response parsing saves reasoning, tone, and optional variants", () =>
   assert.equal(parsed.variants.warm, "Hey Alex, this new workflow may help.");
   assert.equal(parsed.variants.short, "This workflow video may help.");
   assert.equal(parsed.variants.beginnerFriendly, "Start with the simplest workflow in this video.");
+  assert.deepEqual(parsed.advisory, {
+    fanQuestion: null,
+    sourceContext: null,
+    likelyNeed: null,
+    recommendedAction: null,
+    replyNow: null,
+    followUpOutline: null,
+    attachedVideoStatus: null,
+  });
+});
+
+test("Mind response parsing returns the creator advisory sections and removes untrusted links", () => {
+  const trustedUrl = "https://www.youtube.com/watch?v=abcDEF12345";
+  const parsed = parseMindReasoningResponse(
+    [
+      "FAN_QUESTION: What software should beginners use?",
+      "SOURCE_CONTEXT: The stored source description covers a beginner workflow.",
+      "LIKELY_NEED: A practical first step, not a broad tool list.",
+      "RECOMMENDED_ACTION: Reply now with one concrete starting point.",
+      `REPLY_NOW: Start here: https://example.com/fake and ${trustedUrl}`,
+      "FOLLOW_UP_OUTLINE: Make a short walkthrough comparing the first two steps.",
+      "ATTACHED_VIDEO_STATUS: A verified video is attached.",
+      "TONE: Warm and practical",
+    ].join("\n"),
+    false,
+    trustedUrl,
+  );
+
+  assert.equal(parsed.advisory.fanQuestion, "What software should beginners use?");
+  assert.equal(parsed.advisory.recommendedAction, "Reply now with one concrete starting point.");
+  assert.equal(parsed.advisory.replyNow, `Start here: and ${trustedUrl}`);
+  assert.equal(parsed.advisory.followUpOutline, "Make a short walkthrough comparing the first two steps.");
+  assert.equal(parsed.advisory.attachedVideoStatus, "A verified video is attached.");
 });
 
 test("Mind output cannot claim an unproven posted reply", () => {

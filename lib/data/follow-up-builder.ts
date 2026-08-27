@@ -52,6 +52,17 @@ export interface MindReasoningVariants {
   warm: string | null;
   short: string | null;
   beginnerFriendly: string | null;
+  advisory: FollowUpMindAdvisory | null;
+}
+
+export interface FollowUpMindAdvisory {
+  fanQuestion: string | null;
+  sourceContext: string | null;
+  likelyNeed: string | null;
+  recommendedAction: string | null;
+  replyNow: string | null;
+  followUpOutline: string | null;
+  attachedVideoStatus: string | null;
 }
 
 export interface FollowUpMindReasoning {
@@ -74,6 +85,7 @@ export interface FollowUpOpportunity {
   commentPublishedAt: string;
   sourceId: string;
   sourceTitle: string;
+  sourceDescription: string | null;
   sourceUrl: string | null;
   sourcePlatform: string;
   creatorEventId: string;
@@ -82,6 +94,8 @@ export interface FollowUpOpportunity {
   creatorEventOccurredAt: string;
   creatorEventSourceTitle: string | null;
   creatorEventSourceUrl: string | null;
+  creatorEventVideoId: string | null;
+  creatorEventVideoUrl: string | null;
   whyNow: string;
   suggestedReply: string;
   confidenceLabel: string;
@@ -92,6 +106,10 @@ export interface FollowUpOpportunity {
   onboardingContext?: string | null;
   dataOrigin: Exclude<FollowUpDataOrigin, "none">;
   proof: FollowUpProof;
+}
+
+export function followUpOpportunityAnchor(opportunityId: string): string {
+  return `follow-up-opportunity-${opportunityId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 }
 
 export interface FollowUpActionVisibility {
@@ -278,8 +296,75 @@ function stringMetadata(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
 }
 
+const YOUTUBE_VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
+const YOUTUBE_HOSTS = new Set([
+  "youtu.be",
+  "youtube.com",
+  "www.youtube.com",
+  "m.youtube.com",
+  "music.youtube.com",
+  "youtube-nocookie.com",
+  "www.youtube-nocookie.com",
+]);
+
+function validYouTubeVideoId(value: unknown): string | null {
+  return typeof value === "string" && YOUTUBE_VIDEO_ID_PATTERN.test(value) ? value : null;
+}
+
+export function extractYouTubeVideoId(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const directId = validYouTubeVideoId(value.trim());
+  if (directId) return directId;
+
+  try {
+    const parsed = new URL(value);
+    if (!/^https?:$/.test(parsed.protocol) || !YOUTUBE_HOSTS.has(parsed.hostname.toLowerCase())) return null;
+    if (parsed.hostname.toLowerCase() === "youtu.be") {
+      return validYouTubeVideoId(parsed.pathname.split("/").filter(Boolean)[0]);
+    }
+    const watchId = parsed.pathname === "/watch" ? parsed.searchParams.get("v") : null;
+    if (watchId) return validYouTubeVideoId(watchId);
+    const pathMatch = parsed.pathname.match(/^\/(?:embed|live|shorts)\/([A-Za-z0-9_-]{11})(?:\/|$)/);
+    return validYouTubeVideoId(pathMatch?.[1]);
+  } catch {
+    return null;
+  }
+}
+
+export function getCreatorEventYouTubeVideoId(
+  event: CreatorEvent,
+  eventSource: Source | undefined,
+): string | null {
+  if (!isImportedYouTubeEvent(event, eventSource)) return null;
+  const payload = isRecord(event.payload) ? event.payload : {};
+  const metadata = isRecord(eventSource?.metadata) ? eventSource.metadata : {};
+  const candidates = [
+    payload.video_id,
+    payload.youtube_video_id,
+    payload.video_url,
+    metadata.youtube_video_id,
+    eventSource?.external_id,
+    eventSource?.url,
+  ];
+  return candidates.reduce<string | null>((videoId, candidate) => videoId ?? extractYouTubeVideoId(typeof candidate === "string" ? candidate : null), null);
+}
+
+export function getCreatorEventYouTubeVideoUrl(
+  event: CreatorEvent,
+  eventSource: Source | undefined,
+): string | null {
+  const videoId = getCreatorEventYouTubeVideoId(event, eventSource);
+  return videoId ? `https://www.youtube.com/watch?v=${videoId}` : null;
+}
+
+function sourceDescription(source: Source | undefined): string | null {
+  if (!source || !isRecord(source.metadata)) return null;
+  return stringMetadata(source.metadata.description) ?? stringMetadata(source.metadata.video_description);
+}
+
 function mindReasoningFromRow(row: MindReasoningRow): FollowUpMindReasoning {
   const variants = isRecord(row.variants) ? row.variants : {};
+  const advisory = isRecord(variants.advisory) ? variants.advisory : null;
   return {
     id: row.id,
     mindId: row.mind_id,
@@ -290,6 +375,17 @@ function mindReasoningFromRow(row: MindReasoningRow): FollowUpMindReasoning {
       warm: stringMetadata(variants.warm),
       short: stringMetadata(variants.short),
       beginnerFriendly: stringMetadata(variants.beginner_friendly),
+      advisory: advisory
+        ? {
+            fanQuestion: stringMetadata(advisory.fan_question),
+            sourceContext: stringMetadata(advisory.source_context),
+            likelyNeed: stringMetadata(advisory.likely_need),
+            recommendedAction: stringMetadata(advisory.recommended_action),
+            replyNow: stringMetadata(advisory.reply_now),
+            followUpOutline: stringMetadata(advisory.follow_up_outline),
+            attachedVideoStatus: stringMetadata(advisory.attached_video_status),
+          }
+        : null,
     },
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -351,19 +447,22 @@ function suggestedReplyForVoice(
   eventTitle: string,
   eventUrl: string | null,
 ): string {
+  const safeMemberName = memberName.replace(/https?:\/\/[^\s<>"')]+/gi, "").trim() || "there";
+  const safeCommentText = commentText.replace(/https?:\/\/[^\s<>"')]+/gi, "").replace(/[ \t]{2,}/g, " ").trim() || "your question";
+  const safeEventTitle = eventTitle.replace(/https?:\/\/[^\s<>"')]+/gi, "").replace(/[ \t]{2,}/g, " ").trim() || "this new content";
   const destination = eventUrl ? ` ${eventUrl}` : "";
   switch (voice) {
     case "direct":
-      return `${memberName}, you asked “${commentText}” and this new content answers it: ${eventTitle}.${destination}`;
+      return `${safeMemberName}, you asked “${safeCommentText}” and this new content answers it: ${safeEventTitle}.${destination}`;
     case "beginner-friendly":
-      return `Hi ${memberName}, you asked “${commentText}”. This is a simple place to start: ${eventTitle}.${destination}`;
+      return `Hi ${safeMemberName}, you asked “${safeCommentText}”. This is a simple place to start: ${safeEventTitle}.${destination}`;
     case "professional":
-      return `Hi ${memberName}, following up on your question: “${commentText}”. This new content may be useful: ${eventTitle}.${destination}`;
+      return `Hi ${safeMemberName}, following up on your question: “${safeCommentText}”. This new content may be useful: ${safeEventTitle}.${destination}`;
     case "playful":
-      return `Hey ${memberName}, circling back to your “${commentText}” question. This new content might be just the thing: ${eventTitle}.${destination}`;
+      return `Hey ${safeMemberName}, circling back to your “${safeCommentText}” question. This new content might be just the thing: ${safeEventTitle}.${destination}`;
     case "warm":
     default:
-      return `Hey ${memberName}, you asked “${commentText}” and I thought this new video might help: ${eventTitle}${eventUrl ? ` - ${eventUrl}` : "."}`;
+      return `Hey ${safeMemberName}, you asked “${safeCommentText}” and I thought this new video might help: ${safeEventTitle}${eventUrl ? ` - ${eventUrl}` : "."}`;
   }
 }
 
@@ -493,7 +592,7 @@ export function buildFollowUpOpportunities(input: FollowUpBuildInput): FollowUpO
       member.display_name,
       interaction.text,
       match.event.title,
-      match.eventSource?.url ?? null,
+      getCreatorEventYouTubeVideoUrl(match.event, match.eventSource),
     );
     const confidenceLabel = question && match.matchedTerms.length >= 2
       ? "Strong evidence: open question plus shared topic"
@@ -510,6 +609,7 @@ export function buildFollowUpOpportunities(input: FollowUpBuildInput): FollowUpO
       commentPublishedAt: interaction.published_at,
       sourceId: source.id,
       sourceTitle: source.title,
+      sourceDescription: sourceDescription(source),
       sourceUrl: source.url,
       sourcePlatform: source.platform,
       creatorEventId: match.event.id,
@@ -518,6 +618,8 @@ export function buildFollowUpOpportunities(input: FollowUpBuildInput): FollowUpO
       creatorEventOccurredAt: match.event.occurred_at,
       creatorEventSourceTitle: match.eventSource?.title ?? null,
       creatorEventSourceUrl: match.eventSource?.url ?? null,
+      creatorEventVideoId: getCreatorEventYouTubeVideoId(match.event, match.eventSource),
+      creatorEventVideoUrl: getCreatorEventYouTubeVideoUrl(match.event, match.eventSource),
       whyNow,
       suggestedReply,
       confidenceLabel,

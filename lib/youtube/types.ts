@@ -9,6 +9,7 @@ export type YouTubeConnectionPublic = Omit<
 export interface YouTubeVideo {
   id: string;
   title: string;
+  description: string | null;
   publishedAt: string | null;
   thumbnailUrl: string | null;
   channelId: string | null;

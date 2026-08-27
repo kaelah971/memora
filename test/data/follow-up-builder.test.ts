@@ -4,6 +4,9 @@ import test from "node:test";
 import type { Tables } from "../../lib/supabase/database.types";
 import {
   buildFollowUpOpportunities,
+  extractYouTubeVideoId,
+  followUpOpportunityAnchor,
+  getCreatorEventYouTubeVideoUrl,
   getFollowUpActionVisibility,
 } from "../../lib/data/follow-up-builder";
 
@@ -120,7 +123,16 @@ test("opportunity builder creates a demo fallback opportunity", () => {
   assert.equal(opportunity.dataOrigin, "demo-seed-fallback");
   assert.equal(opportunity.audienceMemberName, "Alex");
   assert.equal(opportunity.creatorEventTitle, "My Beginner Editing Workflow");
+  assert.equal(opportunity.creatorEventVideoUrl, null);
+  assert.doesNotMatch(opportunity.suggestedReply, /youtube\.com|youtu\.be|watch\?v=/i);
   assert.match(opportunity.whyNow, /shares editing, software/i);
+});
+
+test("queue links target the matching follow-up detail anchor", () => {
+  assert.equal(
+    followUpOpportunityAnchor("follow-up:interaction-1:event-1"),
+    "follow-up-opportunity-follow-up-interaction-1-event-1",
+  );
 });
 
 test("imported YouTube records are preferred and proof fields are complete", () => {
@@ -128,15 +140,15 @@ test("imported YouTube records are preferred and proof fields are complete", () 
     platform: "youtube",
     source_type: "video",
     title: "Beginner Editing Workflow",
-    url: "https://www.youtube.com/watch?v=real-video",
-    metadata: { youtube_channel_id: "real-channel" },
+    url: "https://www.youtube.com/watch?v=abcDEF12345",
+    metadata: { youtube_channel_id: "real-channel", description: "A stored source description." },
   });
   const importedEventSource = source({
     id: "source-event-1",
     platform: "youtube",
     source_type: "video",
     title: "Beginner Editing Workflow",
-    url: "https://www.youtube.com/watch?v=real-video",
+    url: "https://www.youtube.com/watch?v=abcDEF12345",
     metadata: { youtube_channel_id: "real-channel" },
   });
   const input = dataset({
@@ -158,11 +170,25 @@ test("imported YouTube records are preferred and proof fields are complete", () 
 
   assert.ok(opportunity);
   assert.equal(opportunity.dataOrigin, "real-youtube");
+  assert.equal(opportunity.sourceDescription, "A stored source description.");
+  assert.equal(opportunity.creatorEventVideoId, "abcDEF12345");
+  assert.equal(opportunity.creatorEventVideoUrl, "https://www.youtube.com/watch?v=abcDEF12345");
+  assert.match(opportunity.suggestedReply, /abcDEF12345/);
   assert.equal(opportunity.proof.sourceComment, opportunity.commentText);
   assert.ok(opportunity.proof.rememberedContext);
   assert.ok(opportunity.proof.newContent);
   assert.ok(opportunity.proof.followUpReason);
   assert.equal(opportunity.proof.mindsContinuity.available, true);
+});
+
+test("follow-up video links require a real YouTube video ID from the matching event", () => {
+  const current = dataset();
+  const event = current.creatorEvents[0];
+  const eventSource = current.sources.find((item) => item.id === event.source_id);
+
+  assert.equal(extractYouTubeVideoId("https://youtu.be/abcDEF12345?t=30"), "abcDEF12345");
+  assert.equal(extractYouTubeVideoId("https://www.youtube.com/watch?v=demo-video"), null);
+  assert.equal(getCreatorEventYouTubeVideoUrl(event, eventSource), null);
 });
 
 test("imported Discord records create a draft-only source-backed opportunity", () => {
@@ -232,6 +258,10 @@ test("follow-up context remembers a member who received onboarding", () => {
 
 test("creator voice changes the deterministic draft without changing source facts", () => {
   const input = dataset();
+  input.interactions[0] = {
+    ...input.interactions[0],
+    text: "What editing software should beginners use? https://example.com/not-a-follow-up",
+  };
   const [opportunity] = buildFollowUpOpportunities({
     ...input,
     dataOrigin: "demo-seed-fallback",
@@ -240,6 +270,7 @@ test("creator voice changes the deterministic draft without changing source fact
 
   assert.ok(opportunity);
   assert.match(opportunity.suggestedReply, /simple place to start/i);
+  assert.doesNotMatch(opportunity.suggestedReply, /example\.com/);
   assert.match(opportunity.commentText, /editing software/i);
 });
 
