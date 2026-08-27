@@ -1,4 +1,4 @@
-import { assertDevelopmentServiceRoleAccess } from "@/lib/supabase/config";
+import { assertDemoWorkspaceAccess, assertDevelopmentServiceRoleAccess } from "@/lib/supabase/config";
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/service-role";
 import type { Tables, TablesInsert, TablesUpdate } from "@/lib/supabase/database.types";
 import { YouTubeIntegrationError, toYouTubeIntegrationError } from "@/lib/youtube/errors";
@@ -7,14 +7,29 @@ import type { YouTubeConnectionPublic } from "@/lib/youtube/types";
 export type YouTubeConnectionInsert = TablesInsert<"youtube_connections">;
 export type YouTubeConnectionUpdate = TablesUpdate<"youtube_connections">;
 
-export function getTrustedYouTubeClient() {
-  if (process.env.NODE_ENV === "production") {
-    throw new YouTubeIntegrationError("workspace_unavailable", 503);
+type Environment = Record<string, string | undefined>;
+
+export function getTrustedYouTubeClient(environment: Environment = process.env) {
+  if (environment.NODE_ENV === "production") {
+    try {
+      assertDemoWorkspaceAccess(environment);
+    } catch {
+      throw new YouTubeIntegrationError(
+        "workspace_unavailable",
+        503,
+        "Production workspace access is disabled. Set MEMORA_DEMO_WORKSPACE_ACCESS=enabled on the server for the hackathon demo workspace.",
+      );
+    }
+  } else {
+    try {
+      assertDevelopmentServiceRoleAccess(environment);
+    } catch (error) {
+      throw toYouTubeIntegrationError(error, "config_missing");
+    }
   }
 
   try {
-    assertDevelopmentServiceRoleAccess();
-    return createServiceRoleSupabaseClient();
+    return createServiceRoleSupabaseClient(environment);
   } catch (error) {
     throw toYouTubeIntegrationError(error, "config_missing");
   }

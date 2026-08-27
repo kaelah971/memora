@@ -19,7 +19,7 @@ const notices: Record<string, string> = {
   oauth_denied: "YouTube authorization was cancelled. You can try again whenever you are ready.",
   invalid_state: "The authorization window expired or could not be verified. Start a new connection.",
   config_missing: "Add the documented Google OAuth and token-encryption variables to .env.local before connecting.",
-  workspace_unavailable: "The local creator workspace is not available. Run the P1 seed and enable the local service-role gate.",
+  workspace_unavailable: "The creator workspace is unavailable. Run the seed and set MEMORA_DEMO_WORKSPACE_ACCESS=enabled on the server for a production hackathon demo.",
   auth_required: "Reconnect YouTube so Memora can read comments with the current permission.",
 };
 
@@ -83,7 +83,7 @@ export default async function ImportPage({ searchParams }: ImportPageProps) {
       const creator = await getDevelopmentCreator();
       connection = await getPublicYouTubeConnection(creator.id);
     } catch {
-      connectionError = "The local creator workspace is not available for this YouTube connection.";
+      connectionError = "The creator workspace is not available for this YouTube connection. For a production hackathon demo, set MEMORA_DEMO_WORKSPACE_ACCESS=enabled on the server.";
     }
   }
 

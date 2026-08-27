@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createServiceRoleSupabaseClient } from "@/lib/supabase/admin";
+import { getProductionWorkspaceAccessBlock } from "@/lib/data/access-policy";
 import { getSupabaseConfigStatus } from "@/lib/supabase/config";
 import type { DataAccessStatus, DataClient } from "@/lib/data/types";
 
@@ -9,17 +10,16 @@ export interface DevelopmentDataAccess {
   status: DataAccessStatus;
 }
 
-export function getDevelopmentDataAccess(): DevelopmentDataAccess {
-  const config = getSupabaseConfigStatus();
+type Environment = Record<string, string | undefined>;
 
-  if (process.env.NODE_ENV === "production") {
+export function getDevelopmentDataAccess(environment: Environment = process.env): DevelopmentDataAccess {
+  const config = getSupabaseConfigStatus(environment);
+  const productionAccessBlock = getProductionWorkspaceAccessBlock(environment);
+
+  if (productionAccessBlock) {
     return {
       client: null,
-      status: {
-        available: false,
-        mode: "unavailable",
-        reason: "Authentication is required before database workspace access is enabled in production.",
-      },
+      status: productionAccessBlock,
     };
   }
 
@@ -29,12 +29,12 @@ export function getDevelopmentDataAccess(): DevelopmentDataAccess {
       status: {
         available: false,
         mode: "unavailable",
-        reason: "Configure Supabase public variables and SUPABASE_SERVICE_ROLE_KEY for local data access.",
+        reason: "Configure Supabase public variables and SUPABASE_SERVICE_ROLE_KEY for server-side data access.",
       },
     };
   }
 
-  if (!config.developmentAccessEnabled) {
+  if (environment.NODE_ENV !== "production" && !config.developmentAccessEnabled) {
     return {
       client: null,
       status: {
@@ -47,7 +47,7 @@ export function getDevelopmentDataAccess(): DevelopmentDataAccess {
 
   try {
     return {
-      client: createServiceRoleSupabaseClient(),
+      client: createServiceRoleSupabaseClient(environment),
       status: { available: true, mode: "service_role", reason: null },
     };
   } catch (error) {

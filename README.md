@@ -197,6 +197,7 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 MEMORA_DEV_DB_ACCESS=service_role
+MEMORA_DEMO_WORKSPACE_ACCESS=disabled
 
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
@@ -257,11 +258,12 @@ npm run minds:spike
 - The Next.js app can deploy to Vercel.
 - Supabase is the database and deterministic memory store.
 - Minds provides the persistent reasoning agent.
+- For hackathon demo deployments, set `MEMORA_DEMO_WORKSPACE_ACCESS=enabled` on Vercel so the seeded demo workspace can be shown. This is a demo gate, not user auth.
 - The Discord live listener is an always-on worker. For the demo, run it locally with `npm run discord:listen`.
 - In production, run the Discord worker on Railway, Render, Fly.io, or another worker host.
 - Do not attempt to permanently host the Discord gateway listener in a Vercel serverless route.
 - Keep service-role credentials, OAuth secrets, bot tokens, encryption keys, and Minds credentials server-side.
-- The current demo uses an explicit local service-role access gate. Production multi-user auth and ownership policies should be completed before exposing the workspace broadly.
+- The local app uses `MEMORA_DEV_DB_ACCESS=service_role`; the Vercel demo uses the separate server-side `MEMORA_DEMO_WORKSPACE_ACCESS=enabled` gate. Production multi-user auth and ownership policies should be completed before exposing the workspace broadly.
 
 ## Current Status
 

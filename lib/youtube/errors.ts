@@ -25,7 +25,7 @@ const publicMessages: Record<YouTubeErrorCode, string> = {
   oauth_denied: "YouTube authorization was cancelled.",
   invalid_state: "YouTube authorization could not be verified. Start again.",
   invalid_request: "That YouTube request could not be understood.",
-  workspace_unavailable: "The local creator workspace is not available.",
+  workspace_unavailable: "The creator workspace is unavailable. For a production hackathon demo, set MEMORA_DEMO_WORKSPACE_ACCESS=enabled on the server.",
   connection_missing: "Connect a YouTube channel before using this import.",
   auth_required: "Reconnect YouTube to continue.",
   channel_missing: "No YouTube channel was available for this Google account.",

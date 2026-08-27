@@ -6,6 +6,7 @@ const SUPABASE_URL_ENV = "NEXT_PUBLIC_SUPABASE_URL";
 const SUPABASE_ANON_KEY_ENV = "NEXT_PUBLIC_SUPABASE_ANON_KEY";
 const SUPABASE_SERVICE_ROLE_KEY_ENV = "SUPABASE_SERVICE_ROLE_KEY";
 const DEV_ACCESS_ENV = "MEMORA_DEV_DB_ACCESS";
+const DEMO_WORKSPACE_ACCESS_ENV = "MEMORA_DEMO_WORKSPACE_ACCESS";
 
 type Environment = Record<string, string | undefined>;
 
@@ -14,6 +15,7 @@ export interface SupabaseConfigStatus {
   anonKeyConfigured: boolean;
   serviceRoleConfigured: boolean;
   developmentAccessEnabled: boolean;
+  demoWorkspaceAccessEnabled: boolean;
   missingPublic: string[];
 }
 
@@ -81,6 +83,7 @@ export function getSupabaseConfigStatus(
     anonKeyConfigured,
     serviceRoleConfigured,
     developmentAccessEnabled: environment[DEV_ACCESS_ENV] === "service_role",
+    demoWorkspaceAccessEnabled: environment[DEMO_WORKSPACE_ACCESS_ENV] === "enabled",
     missingPublic,
   };
 }
@@ -89,6 +92,14 @@ export function assertDevelopmentServiceRoleAccess(environment: Environment = pr
   if (environment[DEV_ACCESS_ENV] !== "service_role") {
     throw new SupabaseConfigError(
       `Set ${DEV_ACCESS_ENV}=service_role to enable trusted local database operations.`,
+    );
+  }
+}
+
+export function assertDemoWorkspaceAccess(environment: Environment = process.env): void {
+  if (environment[DEMO_WORKSPACE_ACCESS_ENV] !== "enabled") {
+    throw new SupabaseConfigError(
+      `Set ${DEMO_WORKSPACE_ACCESS_ENV}=enabled to enable the production hackathon demo workspace.`,
     );
   }
 }
@@ -134,4 +145,5 @@ export {
   SUPABASE_ANON_KEY_ENV,
   SUPABASE_SERVICE_ROLE_KEY_ENV,
   SUPABASE_URL_ENV,
+  DEMO_WORKSPACE_ACCESS_ENV,
 };

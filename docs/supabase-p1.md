@@ -11,9 +11,10 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 SUPABASE_SERVICE_ROLE_KEY=
 MEMORA_DEV_DB_ACCESS=service_role
+MEMORA_DEMO_WORKSPACE_ACCESS=disabled
 ```
 
-The service-role key is server-side only. `MEMORA_DEV_DB_ACCESS=service_role` is an explicit local-development opt-in for the P1 app shell and seed tooling. Production workspace reads remain disabled until authentication and RLS ownership policies are implemented.
+The service-role key is server-side only. `MEMORA_DEV_DB_ACCESS=service_role` is an explicit local-development opt-in for the P1 app shell and seed tooling. For a hackathon demo deployment, `MEMORA_DEMO_WORKSPACE_ACCESS=enabled` is a separate server-side gate that allows the seeded demo workspace to be shown without browser credential elevation. It is not user authentication; production multi-user access still requires authentication and RLS ownership policies.
 
 ## Apply Migrations
 
@@ -31,7 +32,7 @@ Do not use `drizzle push` or dashboard-only schema changes. The migration create
 
 This project does not rely on automatic exposure for new public tables. The versioned migration `20260824000000_grant_service_role_memora_tables.sql` explicitly grants `service_role` schema usage and `SELECT`, `INSERT`, `UPDATE`, and `DELETE` on the seven current P1 tables. No sequence grants are required because the P1 primary keys use UUID defaults.
 
-The grant is for trusted server-side seed and development access only. `anon` and `authenticated` intentionally receive no table grants until authentication and creator-ownership RLS policies are implemented.
+The grant is for trusted server-side seed, development, and explicitly gated hackathon-demo access only. `anon` and `authenticated` intentionally receive no table grants until authentication and creator-ownership RLS policies are implemented.
 
 ## Seed And Doctor
 
@@ -68,6 +69,6 @@ Not stored in P1:
 - AI-generated profiles or question detection;
 - Minds conclusions.
 
-The `anon` and `authenticated` roles are denied access until creator ownership can be mapped to authenticated users. Supabase service-role access bypasses RLS and is limited to explicit server-side development tooling in this milestone.
+The `anon` and `authenticated` roles are denied access until creator ownership can be mapped to authenticated users. Supabase service-role access bypasses RLS and is limited to explicit server-side development tooling or the separately enabled hackathon demo gate.
 
 P1.5 YouTube OAuth, token handling, bounded video listing, comment normalization, quota limits, and manual Google Cloud setup are documented in `docs/youtube-p1-5.md`.

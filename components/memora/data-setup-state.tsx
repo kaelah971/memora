@@ -8,7 +8,7 @@ export function DataSetupState({ reason }: DataSetupStateProps) {
       <span className="section-label">DATABASE SETUP</span>
       <h2 id="data-setup-title">The deterministic workspace is not connected.</h2>
       <p>{reason}</p>
-      <span className="data-label">No browser credential has been elevated.</span>
+      <span className="data-label">Server-side workspace access only. No browser credential is elevated.</span>
     </section>
   );
 }
