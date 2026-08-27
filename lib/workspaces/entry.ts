@@ -19,3 +19,15 @@ export function workspacePath(mode: WorkspaceEntryMode, path: string): string {
   const basePath = workspaceBasePath(mode);
   return path === "/app" ? basePath : `${basePath}${path.slice("/app".length)}`;
 }
+
+export function shouldShowMyWorkspaceOnboarding(
+  route: WorkspaceRoute,
+  counts: {
+    interactions: number;
+    openQuestions: number;
+    audienceMembers: number;
+    creatorEvents: number;
+  },
+): boolean {
+  return route === "mine" && Object.values(counts).every((count) => count === 0);
+}

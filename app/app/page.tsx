@@ -1,9 +1,12 @@
 import { AppScreen } from "@/components/memora/app-screen";
 import { DataSetupState } from "@/components/memora/data-setup-state";
 import { ProductEmptyState } from "@/components/memora/product-empty-state";
+import { DemoWalkthrough } from "@/components/memora/demo-walkthrough";
+import { MyWorkspaceOnboarding } from "@/components/memora/my-workspace-onboarding";
 import { WorkspaceEntryChoice } from "@/components/memora/workspace-entry-choice";
 import { getCreatorWorkspaceSummary } from "@/lib/data/creators";
 import { getCurrentWorkspaceSelection, requiresWorkspaceChoice } from "@/lib/workspaces/access";
+import { shouldShowMyWorkspaceOnboarding } from "@/lib/workspaces/entry";
 import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
@@ -45,25 +48,31 @@ export default async function AppHomePage() {
       description="Your workspace keeps source evidence, audience memory and follow-up decisions in one place."
       status={result.data?.creator.display_name ? "WORKSPACE / CONNECTED" : "DATABASE STATE / P1"}
     >
+      {selection.route === "demo" ? <DemoWalkthrough /> : null}
       {!result.access.available ? (
         <DataSetupState reason={result.error ?? "Supabase data access is not configured."} />
       ) : result.data ? (
-        <section className="workspace-state" aria-labelledby="workspace-state-title">
-          <div className="workspace-state__heading">
-            <div>
-              <span className="section-label">{result.data.creator.display_name}</span>
-              <h2 id="workspace-state-title">Facts before reasoning.</h2>
-              <p>These counts come from persisted sources and creator records. No semantic conclusions are included.</p>
+        <>
+          {shouldShowMyWorkspaceOnboarding(selection.route, result.data.counts) ? (
+            <MyWorkspaceOnboarding />
+          ) : null}
+          <section className="workspace-state" aria-labelledby="workspace-state-title">
+            <div className="workspace-state__heading">
+              <div>
+                <span className="section-label">{result.data.creator.display_name}</span>
+                <h2 id="workspace-state-title">Facts before reasoning.</h2>
+                <p>These counts come from persisted sources and creator records. No semantic conclusions are included.</p>
+              </div>
+              <span className="state-sticker state-sticker--remembered">DATABASE CONNECTED</span>
             </div>
-            <span className="state-sticker state-sticker--remembered">DATABASE CONNECTED</span>
-          </div>
-          <div className="workspace-counts">
-            <CountBlock label="INTERACTIONS" value={result.data.counts.interactions} />
-            <CountBlock label="OPEN QUESTIONS" value={result.data.counts.openQuestions} />
-            <CountBlock label="AUDIENCE MEMBERS" value={result.data.counts.audienceMembers} />
-            <CountBlock label="CREATOR EVENTS" value={result.data.counts.creatorEvents} />
-          </div>
-        </section>
+            <div className="workspace-counts">
+              <CountBlock label="INTERACTIONS" value={result.data.counts.interactions} />
+              <CountBlock label="OPEN QUESTIONS" value={result.data.counts.openQuestions} />
+              <CountBlock label="AUDIENCE MEMBERS" value={result.data.counts.audienceMembers} />
+              <CountBlock label="CREATOR EVENTS" value={result.data.counts.creatorEvents} />
+            </div>
+          </section>
+        </>
       ) : (
         <ProductEmptyState
           eyebrow="NO DEMO CREATOR"

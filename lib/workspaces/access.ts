@@ -194,7 +194,7 @@ async function ensureUserWorkspace(client: DataClient, user: User, status: DataA
   }
 }
 
-export async function getCurrentWorkspaceContext(): Promise<WorkspaceContextResult> {
+export async function getCurrentWorkspaceContext(modeOverride?: WorkspaceMode): Promise<WorkspaceContextResult> {
   const environment = process.env;
   const selection = await getCurrentWorkspaceSelection();
   if (!selection.accessConfigured) {
@@ -208,7 +208,8 @@ export async function getCurrentWorkspaceContext(): Promise<WorkspaceContextResu
     return unavailable(error instanceof Error ? error.message : "Supabase configuration could not be loaded.");
   }
 
-  const { user, mode, demoAvailable } = selection;
+  const { user, demoAvailable } = selection;
+  const mode = modeOverride ?? selection.mode;
   const status: DataAccessStatus = {
     available: true,
     mode: user ? "authenticated" : "service_role",
@@ -229,8 +230,12 @@ export async function getCurrentCreator(): Promise<Tables<"creators"> | null> {
   return (await getCurrentWorkspaceContext()).data?.creator ?? null;
 }
 
-export async function getCurrentIntegrationWorkspaceContext(): Promise<WorkspaceContextResult> {
-  const context = await getCurrentWorkspaceContext();
+export async function getCurrentIntegrationWorkspaceContext(modeOverride?: WorkspaceMode): Promise<WorkspaceContextResult> {
+  const selection = await getCurrentWorkspaceSelection();
+  const requestedMode = modeOverride ?? selection.mode;
+  // Authenticated integrations always belong to the user's private workspace.
+  const mode = selection.user ? "mine" : requestedMode;
+  const context = await getCurrentWorkspaceContext(mode);
   if (!context.data) return context;
   if (!context.data.user && context.data.mode !== "demo") {
     return {

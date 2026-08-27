@@ -38,16 +38,23 @@ export interface OAuthTokenSet {
   scopes: string[];
 }
 
-export async function exchangeYouTubeOAuthCode(code: string): Promise<{
+export type YouTubeOAuthExchangeStage = "token_exchange" | "channel_lookup";
+
+export async function exchangeYouTubeOAuthCode(
+  code: string,
+  onStage?: (stage: YouTubeOAuthExchangeStage) => void,
+): Promise<{
   channel: ConnectedYouTubeChannel;
   tokens: OAuthTokenSet;
 }> {
   try {
     const client = createGoogleOAuthClient();
+    onStage?.("token_exchange");
     const { tokens } = await client.getToken(code);
     if (!tokens.access_token) throw new YouTubeIntegrationError("auth_required", 401);
 
     client.setCredentials(tokens);
+    onStage?.("channel_lookup");
     const response = await google.youtube({ version: "v3", auth: client }).channels.list({
       part: ["snippet"],
       mine: true,

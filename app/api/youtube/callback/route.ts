@@ -1,27 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { readYouTubeConfig } from "@/lib/youtube/config";
-import { encryptYouTubeToken } from "@/lib/youtube/tokens";
 import {
   exchangeYouTubeOAuthCode,
-  getYouTubeConnection,
   isValidOAuthState,
+  persistYouTubeOAuthConnection,
+  YOUTUBE_OAUTH_RETURN_COOKIE,
   toYouTubeIntegrationError,
-  upsertYouTubeConnection,
   YOUTUBE_OAUTH_STATE_COOKIE,
 } from "@/lib/youtube/server";
 import { getCurrentIntegrationWorkspaceContext } from "@/lib/workspaces/access";
 import { YouTubeIntegrationError } from "@/lib/youtube/errors";
+import type { WorkspaceMode } from "@/lib/workspaces/access";
+import { getYouTubeImportPath, getYouTubeOAuthWorkspaceMode } from "@/lib/youtube/oauth-return";
 
-function redirectToImport(request: Request, reason?: string) {
-  const url = new URL("/app/import", request.url);
+function redirectToImport(request: Request, mode: WorkspaceMode, reason?: string) {
+  const url = new URL(getYouTubeImportPath(mode), request.url);
   if (reason) url.searchParams.set("youtube", reason);
   return NextResponse.redirect(url);
 }
 
-function clearStateCookie(response: NextResponse) {
+function clearOAuthCookies(response: NextResponse) {
   response.cookies.set({
     name: YOUTUBE_OAUTH_STATE_COOKIE,
+    value: "",
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 0,
+    path: "/api/youtube",
+  });
+  response.cookies.set({
+    name: YOUTUBE_OAUTH_RETURN_COOKIE,
     value: "",
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
@@ -32,49 +42,65 @@ function clearStateCookie(response: NextResponse) {
   return response;
 }
 
+function describeOAuthError(error: unknown) {
+  if (error instanceof YouTubeIntegrationError) {
+    return { name: error.name, code: error.code, status: error.status, message: error.message.slice(0, 240) };
+  }
+  if (error instanceof Error) return { name: error.name, message: error.message.slice(0, 240) };
+  return { name: "UnknownError" };
+}
+
 export async function GET(request: NextRequest) {
   const params = request.nextUrl.searchParams;
+  const requestedMode = getYouTubeOAuthWorkspaceMode(request.cookies.get(YOUTUBE_OAUTH_RETURN_COOKIE)?.value);
+  let redirectMode = requestedMode;
   const state = params.get("state") ?? undefined;
   const expectedState = request.cookies.get(YOUTUBE_OAUTH_STATE_COOKIE)?.value;
   if (!isValidOAuthState(expectedState, state)) {
-    return clearStateCookie(redirectToImport(request, "invalid_state"));
+    return clearOAuthCookies(redirectToImport(request, requestedMode, "invalid_state"));
   }
 
   if (params.get("error")) {
-    return clearStateCookie(redirectToImport(request, "oauth_denied"));
+    return clearOAuthCookies(redirectToImport(request, requestedMode, "oauth_denied"));
   }
 
   const code = params.get("code");
-  if (!code) return clearStateCookie(redirectToImport(request, "invalid_request"));
+  if (!code) return clearOAuthCookies(redirectToImport(request, requestedMode, "invalid_request"));
 
+  let stage = "resolve_session_workspace_creator";
+  let workspaceId: string | undefined;
+  let creatorId: string | undefined;
   try {
-    const context = await getCurrentIntegrationWorkspaceContext();
+    const context = await getCurrentIntegrationWorkspaceContext(requestedMode);
     if (!context.data) throw new YouTubeIntegrationError("auth_required", 401, context.error ?? "Sign in before connecting YouTube.");
-    const creator = context.data.creator;
-    const { channel, tokens } = await exchangeYouTubeOAuthCode(code);
+    redirectMode = context.data.mode;
+    workspaceId = context.data.workspace.id;
+    creatorId = context.data.creator.id;
+    stage = "encryption_config";
     const config = readYouTubeConfig();
-    const existingConnection = await getYouTubeConnection(creator.id);
-    const existingRefreshToken = existingConnection?.youtube_channel_id === channel.channelId
-      ? existingConnection.refresh_token_ciphertext
-      : null;
-    await upsertYouTubeConnection({
-      creator_id: creator.id,
-      google_account_id: null,
-      youtube_channel_id: channel.channelId,
-      youtube_channel_title: channel.title,
-      youtube_channel_handle: channel.handle,
-      access_token_ciphertext: encryptYouTubeToken(tokens.accessToken, config.tokenEncryptionKey),
-      refresh_token_ciphertext: tokens.refreshToken
-        ? encryptYouTubeToken(tokens.refreshToken, config.tokenEncryptionKey)
-        : existingRefreshToken,
-      token_expires_at: tokens.expiryDate ? new Date(tokens.expiryDate).toISOString() : null,
-      scopes: tokens.scopes,
-      connected_at: new Date().toISOString(),
-      last_synced_at: null,
+    const { channel, tokens } = await exchangeYouTubeOAuthCode(code, (exchangeStage) => {
+      stage = exchangeStage;
     });
-    return clearStateCookie(redirectToImport(request, "connected"));
+    await persistYouTubeOAuthConnection({
+      context: context.data,
+      channel,
+      tokens,
+      tokenEncryptionKey: config.tokenEncryptionKey,
+      onStage: (persistenceStage) => {
+        stage = persistenceStage;
+      },
+    });
+    return clearOAuthCookies(redirectToImport(request, redirectMode, "connected"));
   } catch (error) {
-    const safeError = toYouTubeIntegrationError(error);
-    return clearStateCookie(redirectToImport(request, safeError.code));
+    const safeError = toYouTubeIntegrationError(error, stage === "encryption_config" ? "config_missing" : "api_error");
+    console.error("[memora/youtube/oauth-callback]", {
+      stage,
+      requestedMode,
+      redirectMode,
+      workspaceId,
+      creatorId,
+      error: describeOAuthError(error),
+    });
+    return clearOAuthCookies(redirectToImport(request, redirectMode, safeError.code));
   }
 }

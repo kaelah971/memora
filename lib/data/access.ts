@@ -74,9 +74,9 @@ export function getDevelopmentDataAccess(environment: Environment = process.env)
   }
 }
 
-export async function getCurrentDataAccess(): Promise<DevelopmentDataAccess> {
+export async function getCurrentDataAccess(mode?: "mine" | "demo"): Promise<DevelopmentDataAccess> {
   const { getCurrentWorkspaceContext } = await import("@/lib/workspaces/access");
-  const context = await getCurrentWorkspaceContext();
+  const context = await getCurrentWorkspaceContext(mode);
   return {
     client: context.data?.client ?? null,
     status: context.access,

@@ -7,6 +7,7 @@ import {
   getYouTubeConfigStatus,
   type YouTubeConnectionPublic,
 } from "@/lib/youtube/server";
+import { YOUTUBE_OAUTH_STORAGE_ERROR_MESSAGE } from "@/lib/youtube/errors";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,7 @@ const notices: Record<string, string> = {
   config_missing: "Add the documented Google OAuth and token-encryption variables to .env.local before connecting.",
   workspace_unavailable: "Sign in to connect your own YouTube channel, or choose View Demo Workspace for the public proof workspace.",
   auth_required: "Reconnect YouTube so Memora can read comments with the current permission.",
+  storage_error: YOUTUBE_OAUTH_STORAGE_ERROR_MESSAGE,
 };
 
 function formatDate(value: string | null): string {

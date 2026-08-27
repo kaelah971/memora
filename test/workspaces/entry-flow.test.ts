@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { requiresWorkspaceChoice, workspacePath } from "../../lib/workspaces/entry";
+import { requiresWorkspaceChoice, shouldShowMyWorkspaceOnboarding, workspacePath } from "../../lib/workspaces/entry";
 
 test("anonymous visitors choose a workspace before entering the app", () => {
   assert.equal(
@@ -28,4 +28,12 @@ test("workspace links stay inside the explicit workspace route", () => {
   assert.equal(workspacePath("demo", "/app"), "/app/demo");
   assert.equal(workspacePath("demo", "/app/follow-up"), "/app/demo/follow-up");
   assert.equal(workspacePath("mine", "/app/import"), "/app/my/import");
+});
+
+test("personal onboarding only appears for an empty personal workspace", () => {
+  const emptyCounts = { interactions: 0, openQuestions: 0, audienceMembers: 0, creatorEvents: 0 };
+
+  assert.equal(shouldShowMyWorkspaceOnboarding("mine", emptyCounts), true);
+  assert.equal(shouldShowMyWorkspaceOnboarding("demo", emptyCounts), false);
+  assert.equal(shouldShowMyWorkspaceOnboarding("mine", { ...emptyCounts, interactions: 1 }), false);
 });

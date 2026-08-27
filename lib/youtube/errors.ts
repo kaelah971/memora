@@ -19,6 +19,8 @@ export type YouTubeErrorCode =
   | "storage_error"
   | "reply_proof_storage_error";
 
+export const YOUTUBE_OAUTH_STORAGE_ERROR_MESSAGE = "YouTube authorized successfully, but Memora could not save the connection. Check workspace storage configuration.";
+
 const publicMessages: Record<YouTubeErrorCode, string> = {
   config_missing: "YouTube connection is not configured on this server.",
   token_storage_invalid: "Secure YouTube token storage is not configured correctly.",

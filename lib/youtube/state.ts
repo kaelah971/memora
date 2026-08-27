@@ -1,6 +1,7 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 
 export const YOUTUBE_OAUTH_STATE_COOKIE = "memora_youtube_oauth_state";
+export const YOUTUBE_OAUTH_RETURN_COOKIE = "memora_youtube_oauth_return";
 
 export function createOAuthState(): string {
   return randomBytes(32).toString("hex");

@@ -1,6 +1,11 @@
 import "server-only";
 
-export { createOAuthState, isValidOAuthState, YOUTUBE_OAUTH_STATE_COOKIE } from "@/lib/youtube/state";
+export {
+  createOAuthState,
+  isValidOAuthState,
+  YOUTUBE_OAUTH_RETURN_COOKIE,
+  YOUTUBE_OAUTH_STATE_COOKIE,
+} from "@/lib/youtube/state";
 export {
   exchangeYouTubeOAuthCode,
   getYouTubeAuthorizationUrl,
@@ -14,6 +19,7 @@ export {
   getPublicYouTubeConnection,
   upsertYouTubeConnection,
 } from "@/lib/youtube/storage";
+export { persistYouTubeOAuthConnection } from "@/lib/youtube/oauth-storage";
 export { listRecentYouTubeVideos } from "@/lib/youtube/videos";
 export { getYouTubeConfigStatus } from "@/lib/youtube/config";
 export { YouTubeIntegrationError, toYouTubeIntegrationError } from "@/lib/youtube/errors";
